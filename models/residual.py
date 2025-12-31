@@ -14,7 +14,7 @@ class ResidualLayer(nn.Module):
     """
 
     def __init__(self, in_dim, h_dim, res_h_dim):
-        super(ResidualLayer, self).__init__()
+        super().__init__()
         self.res_block = nn.Sequential(
             nn.ReLU(True),
             nn.Conv2d(in_dim, res_h_dim, kernel_size=3,
@@ -39,7 +39,7 @@ class ResidualStack(nn.Module):
     """
 
     def __init__(self, in_dim, h_dim, res_h_dim, n_res_layers):
-        super(ResidualStack, self).__init__()
+        super().__init__()
         self.n_res_layers = n_res_layers
         self.stack = nn.ModuleList(
             [ResidualLayer(in_dim, h_dim, res_h_dim)]*n_res_layers)

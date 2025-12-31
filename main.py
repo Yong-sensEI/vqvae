@@ -99,7 +99,7 @@ def train(args):
             x = x.to(device)
             optimizer.zero_grad()
 
-            embedding_loss, x_hat, perplexity = model(x)
+            embedding_loss, x_hat, perplexity, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_train_var
             loss = recon_loss + embedding_loss
 
@@ -136,7 +136,7 @@ def train(args):
             x = x.to(device)
 
             with torch.no_grad():
-                embedding_loss, x_hat, perplexity = model(x)
+                embedding_loss, x_hat, perplexity, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_eval_var
 
             results["recon_errors"].append(recon_loss.cpu().detach().numpy())

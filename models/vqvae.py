@@ -10,7 +10,7 @@ from models.decoder import Decoder
 class VQVAE(nn.Module):
     def __init__(self, h_dim, res_h_dim, n_res_layers,
                  n_embeddings, embedding_dim, beta, save_img_embedding_map=False):
-        super(VQVAE, self).__init__()
+        super().__init__()
         # encode image into continuous latent space
         self.encoder = Encoder(3, h_dim, n_res_layers, res_h_dim)
         self.pre_quantization_conv = nn.Conv2d(
@@ -31,7 +31,7 @@ class VQVAE(nn.Module):
         z_e = self.encoder(x)
 
         z_e = self.pre_quantization_conv(z_e)
-        embedding_loss, z_q, perplexity, _, _ = self.vector_quantization(
+        embedding_loss, z_q, perplexity, _, embed_indices = self.vector_quantization(
             z_e)
         x_hat = self.decoder(z_q)
 
@@ -41,4 +41,4 @@ class VQVAE(nn.Module):
             print('recon data shape:', x_hat.shape)
             assert False
 
-        return embedding_loss, x_hat, perplexity
+        return embedding_loss, x_hat, perplexity, embed_indices

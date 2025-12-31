@@ -20,7 +20,7 @@ class Decoder(nn.Module):
     """
 
     def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim):
-        super(Decoder, self).__init__()
+        super().__init__()
         kernel = 4
         stride = 2
 

@@ -109,7 +109,12 @@ def eval_model(
     dev = torch.device(args.device)
     model.to(dev)
 
+    if os.path.exists(args.output) and not os.path.isdir(args.output):
+        raise NotADirectoryError(
+            f"Output path {args.output} is not a directory."
+        )
     os.makedirs(args.output, exist_ok=True)
+
     if os.path.isdir(args.data):
         img_files = glob.glob(os.path.join(args.data, '*.*'))
         label_files = []
@@ -172,7 +177,7 @@ def eval_model(
         orig_size = dat_set.get_image_size(full_f)
 
         with torch.no_grad():
-            embd_ls, x_hat, perplexity = model(batch.to(dev))
+            embd_ls, x_hat, perplexity, _ = model(batch.to(dev))
 
         img = dat_set.image_tensor_to_numpy(x_hat[0].cpu())
         orig_img = dat_set.image_tensor_to_numpy(batch[0].cpu())
@@ -186,7 +191,12 @@ def eval_model(
 
         recon_ls = np.mean((img - orig_img) ** 2)
         loss_lines.append(
-            f"{img_f}, {embd_ls.item():.6f}, {perplexity.item():.6f}, {recon_ls:.6f}"
+            ','.join([
+                img_f,
+                f"{embd_ls.item():.6f}",
+                f"{perplexity.item():.6f}",
+                f"{recon_ls:.6f}"
+            ])
         )
 
     with open(os.path.join(
@@ -198,4 +208,9 @@ def eval_model(
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
-    eval_model(parse_args())
+
+    try:
+        eval_model(parse_args())
+    except NotADirectoryError as e:
+        print(e)
+        sys.exit(1)
