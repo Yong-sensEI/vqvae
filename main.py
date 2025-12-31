@@ -48,11 +48,6 @@ def train(args):
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
 
-    if not args.no_save:
-        print('Results will be saved in ' +
-            os.path.join(args.filename, args.filename + '.pth')
-        )
-
     # Load data and define batch data loaders
     training_data, validation_data = utils.get_datasets(data_cfg)
 
@@ -120,8 +115,8 @@ def train(args):
         if not STOP_SIG.is_set():
             print(
                 f"Training reconstruction error: {np.mean(results['recon_errors']):.4f}",
-                f"Training embedding loss: {np.mean(results['embedding_loss']):.4f}",
-                f"Training perplexity: {np.mean(results['perplexities']):.4f}"
+                f"embedding loss: {np.mean(results['embedding_loss']):.4f}",
+                f"perplexity: {np.mean(results['perplexities']):.4f}"
             )
         return results
 
@@ -142,7 +137,6 @@ def train(args):
 
             with torch.no_grad():
                 embedding_loss, x_hat, perplexity = model(x)
-            print(x_hat.shape, x.shape)
             recon_loss = torch.mean((x_hat - x)**2) / x_eval_var
 
             results["recon_errors"].append(recon_loss.cpu().detach().numpy())
@@ -152,8 +146,8 @@ def train(args):
         if not STOP_SIG.is_set():
             print(
                 f"Validation reconstruction error: {np.mean(results['recon_errors']):.4f}",
-                f"Validation embedding loss: {np.mean(results['embedding_loss']):.4f}",
-                f"Validation perplexity: {np.mean(results['perplexities']):.4f}"
+                f"embedding loss: {np.mean(results['embedding_loss']):.4f}",
+                f"perplexity: {np.mean(results['perplexities']):.4f}"
             )
         return results
 
