@@ -1,102 +1,187 @@
+''' VQ-VAE Main Training Script '''
+
+import os
+import argparse
+import threading
+import json
+import signal
+
+from tqdm import tqdm
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import argparse
+
+from yw_basics.utils import import_object
+
 import utils
 from models.vqvae import VQVAE
 
-parser = argparse.ArgumentParser()
+STOP_SIG = threading.Event()
 
-"""
-Hyperparameters
-"""
-timestamp = utils.readable_timestamp()
+def signal_handler(_, __):
+    '''
+        Handle the signal to stop training.
+    '''
+    print("Received stop signal, stopping training...")
+    STOP_SIG.set()
 
-parser.add_argument("--batch_size", type=int, default=32)
-parser.add_argument("--n_updates", type=int, default=5000)
-parser.add_argument("--n_hiddens", type=int, default=128)
-parser.add_argument("--n_residual_hiddens", type=int, default=32)
-parser.add_argument("--n_residual_layers", type=int, default=2)
-parser.add_argument("--embedding_dim", type=int, default=64)
-parser.add_argument("--n_embeddings", type=int, default=512)
-parser.add_argument("--beta", type=float, default=.25)
-parser.add_argument("--learning_rate", type=float, default=3e-4)
-parser.add_argument("--log_interval", type=int, default=50)
-parser.add_argument("--dataset",  type=str, default='CIFAR10')
+def parse_args():
+    ''' Parse command line arguments '''
+    parser = argparse.ArgumentParser()
+    timestamp = utils.current_datetime()
 
-# whether or not to save model
-parser.add_argument("-save", action="store_true")
-parser.add_argument("--filename",  type=str, default=timestamp)
+    parser.add_argument("--cfg", type=str, required=True)
+    parser.add_argument("--filename",  type=str, default=timestamp)
 
-args = parser.parse_args()
+    # whether or not to save model
+    parser.add_argument("--no-save", action="store_true")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return parser.parse_args()
 
-if args.save:
-    print('Results will be saved in ./results/vqvae_' + args.filename + '.pth')
+def train(args):
+    ''' Prepare training environment '''
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-"""
-Load data and define batch data loaders
-"""
+    with open(args.cfg, 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
 
-training_data, validation_data, training_loader, validation_loader, x_train_var = utils.load_data_and_data_loaders(
-    args.dataset, args.batch_size)
-"""
-Set up VQ-VAE model with components defined in ./models/ folder
-"""
+    train_cfg = cfg['train']
+    model_cfg = cfg['model']
+    data_cfg = train_cfg['data']
 
-model = VQVAE(args.n_hiddens, args.n_residual_hiddens,
-              args.n_residual_layers, args.n_embeddings, args.embedding_dim, args.beta).to(device)
+    if not args.no_save:
+        print('Results will be saved in ' +
+            os.path.join(args.filename, args.filename + '.pth')
+        )
 
-"""
-Set up optimizer and training loop
-"""
-optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, amsgrad=True)
+    # Load data and define batch data loaders
+    training_data, validation_data = utils.get_datasets(data_cfg)
 
-model.train()
+    x_train_var = utils.get_data_variance(training_data, 1000)
+    x_eval_var = utils.get_data_variance(validation_data, 1000)
+    print(f'Training data variance: {x_train_var:.4f}')
+    print(f'Validation data variance: {x_eval_var:.4f}')
 
-results = {
-    'n_updates': 0,
-    'recon_errors': [],
-    'loss_vals': [],
-    'perplexities': [],
-}
+    training_loader, validation_loader = utils.get_data_loaders(
+        training_data, validation_data, data_cfg
+    )
 
+    # Set up VQ-VAE model with components defined in ./models/ folder
+    model = VQVAE(
+        model_cfg['num_hidden'],
+        model_cfg['num_residual_hidden'],
+        model_cfg['residual_layers'],
+        model_cfg['num_embeddings'],
+        model_cfg['embedding_dim'],
+        model_cfg['commitment_cost']
+    ).to(device)
 
-def train():
+    # Set up optimizer and training loop
+    optimizer = import_object(train_cfg['optimizer']['type'])(
+        model.parameters(),
+        **train_cfg['optimizer'].get('kwargs', {})
+    )
+    scheduler = import_object(train_cfg['scheduler']['type'])(
+        optimizer,
+        **train_cfg['scheduler'].get('kwargs', {})
+    )
 
-    for i in range(args.n_updates):
-        (x, _) = next(iter(training_loader))
-        x = x.to(device)
-        optimizer.zero_grad()
+    log_interval = train_cfg.get('checkpoint', {}).get('interval', 100)
+    save_path = train_cfg.get('checkpoint', {}).get('path', './results')
 
-        embedding_loss, x_hat, perplexity = model(x)
-        recon_loss = torch.mean((x_hat - x)**2) / x_train_var
-        loss = recon_loss + embedding_loss
+    def train_epoch():
+        results = {
+            'recon_errors': [],
+            'embedding_loss': [],
+            'perplexities': [],
+        }
 
-        loss.backward()
-        optimizer.step()
+        model.train()
+        for _ in tqdm(range(train_cfg['num_steps_train'])):
+            if STOP_SIG.is_set():
+                break
 
-        results["recon_errors"].append(recon_loss.cpu().detach().numpy())
-        results["perplexities"].append(perplexity.cpu().detach().numpy())
-        results["loss_vals"].append(loss.cpu().detach().numpy())
-        results["n_updates"] = i
+            x = next(iter(training_loader))
+            x = x.to(device)
+            optimizer.zero_grad()
 
-        if i % args.log_interval == 0:
-            """
-            save model and print values
-            """
-            if args.save:
-                hyperparameters = args.__dict__
-                utils.save_model_and_results(
-                    model, results, hyperparameters, args.filename)
+            embedding_loss, x_hat, perplexity = model(x)
+            recon_loss = torch.mean((x_hat - x)**2) / x_train_var
+            loss = recon_loss + embedding_loss
 
-            print('Update #', i, 'Recon Error:',
-                  np.mean(results["recon_errors"][-args.log_interval:]),
-                  'Loss', np.mean(results["loss_vals"][-args.log_interval:]),
-                  'Perplexity:', np.mean(results["perplexities"][-args.log_interval:]))
+            loss.backward()
+            optimizer.step()
 
+            results["recon_errors"].append(recon_loss.cpu().detach().numpy())
+            results["perplexities"].append(perplexity.cpu().detach().numpy())
+            results["embedding_loss"].append(embedding_loss.cpu().detach().numpy())
+
+        scheduler.step()
+
+        if not STOP_SIG.is_set():
+            print(
+                f"Training reconstruction error: {np.mean(results['recon_errors']):.4f}",
+                f"Training embedding loss: {np.mean(results['embedding_loss']):.4f}",
+                f"Training perplexity: {np.mean(results['perplexities']):.4f}"
+            )
+        return results
+
+    def validate_epoch():
+        results = {
+            'recon_errors': [],
+            'embedding_loss': [],
+            'perplexities': [],
+        }
+
+        model.eval()
+        for _ in tqdm(range(train_cfg['num_steps_validation'])):
+            if STOP_SIG.is_set():
+                break
+
+            x = next(iter(validation_loader))
+            x = x.to(device)
+
+            with torch.no_grad():
+                embedding_loss, x_hat, perplexity = model(x)
+            print(x_hat.shape, x.shape)
+            recon_loss = torch.mean((x_hat - x)**2) / x_eval_var
+
+            results["recon_errors"].append(recon_loss.cpu().detach().numpy())
+            results["perplexities"].append(perplexity.cpu().detach().numpy())
+            results["embedding_loss"].append(embedding_loss.cpu().detach().numpy())
+
+        if not STOP_SIG.is_set():
+            print(
+                f"Validation reconstruction error: {np.mean(results['recon_errors']):.4f}",
+                f"Validation embedding loss: {np.mean(results['embedding_loss']):.4f}",
+                f"Validation perplexity: {np.mean(results['perplexities']):.4f}"
+            )
+        return results
+
+    STOP_SIG.clear()
+
+    for epoch in range(train_cfg['epochs']):
+        print(f"Epoch {epoch + 1}/{train_cfg['epochs']}")
+
+        train_results = train_epoch()
+        if STOP_SIG.is_set():
+            break
+
+        val_results = validate_epoch()
+        if STOP_SIG.is_set():
+            break
+
+        is_final = epoch + 1 == train_cfg['epochs']
+        if 'checkpoint' in train_cfg:
+            if args.no_save or (
+                    (epoch + 1) % log_interval != 0 and not is_final
+                ):
+                continue
+
+            utils.save_model_and_results(
+                save_path, model, cfg, train_results, val_results
+            )
+            print(f"Model saved at epoch {epoch + 1}")
 
 if __name__ == "__main__":
-    train()
+    signal.signal(signal.SIGINT, signal_handler)
+    train(parse_args())

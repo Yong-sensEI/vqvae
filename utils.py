@@ -1,115 +1,122 @@
-import torch
-import torchvision.datasets as datasets
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-import time
+'''
+    Utility functions for data loading, timestamp generation, and model saving.
+'''
+from typing import Dict, Optional, Tuple
 import os
-from datasets.block import BlockDataset, LatentBlockDataset
-import numpy as np
 
+import torch
+from torch.utils.data import DataLoader
 
-def load_cifar():
-    train = datasets.CIFAR10(root="data", train=True, download=True,
-                             transform=transforms.Compose([
-                                 transforms.ToTensor(),
-                                 transforms.Normalize(
-                                     (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                             ]))
+from yw_basics.dataloader import ImageClassificationDataset
+from yw_basics.utils import current_datetime
 
-    val = datasets.CIFAR10(root="data", train=False, download=True,
-                           transform=transforms.Compose([
-                               transforms.ToTensor(),
-                               transforms.Normalize(
-                                   (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                           ]))
-    return train, val
+from models.vqvae import VQVAE
 
+def get_datasets(data_cfg : Dict):
+    '''
+        Create torch dataset.
+    '''
+    train_data = ImageClassificationDataset(
+        label_files = data_cfg['train_files'],
+        transforms_configs = data_cfg.get('transforms', []),
+        normalization_option = data_cfg.get('normalization', None),
+        colorspace=data_cfg.get('colorspace', None)
+    )
+    val_data = ImageClassificationDataset(
+        label_files = data_cfg['validation_files'],
+        transforms_configs = data_cfg.get('transforms', []),
+        normalization_option = data_cfg.get('normalization', None),
+        colorspace=data_cfg.get('colorspace', None)
+    )
+    return train_data, val_data
 
-def load_block():
-    data_folder_path = os.getcwd()
-    data_file_path = data_folder_path + \
-        '/data/randact_traj_length_100_n_trials_1000_n_contexts_1.npy'
+def get_data_variance(
+        dataset : ImageClassificationDataset,
+        max_batches : Optional[int] = None
+    ):
+    '''
+        Calculate variance of the dataset.
+    '''
+    data_loader = DataLoader(
+        dataset,
+        batch_size=1,
+        shuffle=True,
+        pin_memory=True
+    )
+    all_data_tensor = torch.cat(
+        list(data_loader)
+            if max_batches is None or dataset.num_samples(None) < max_batches else
+        [next(iter(data_loader)) for _ in range(max_batches)],
+        dim=0
+    )
+    return torch.var(all_data_tensor).numpy().tolist()
 
-    train = BlockDataset(data_file_path, train=True,
-                         transform=transforms.Compose([
-                             transforms.ToTensor(),
-                             transforms.Normalize(
-                                 (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                         ]))
-
-    val = BlockDataset(data_file_path, train=False,
-                       transform=transforms.Compose([
-                           transforms.ToTensor(),
-                           transforms.Normalize(
-                               (0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-                       ]))
-    return train, val
-
-def load_latent_block():
-    data_folder_path = os.getcwd()
-    data_file_path = data_folder_path + \
-        '/data/latent_e_indices.npy'
-
-    train = LatentBlockDataset(data_file_path, train=True,
-                         transform=None)
-
-    val = LatentBlockDataset(data_file_path, train=False,
-                       transform=None)
-    return train, val
-
-
-def data_loaders(train_data, val_data, batch_size):
-
-    train_loader = DataLoader(train_data,
-                              batch_size=batch_size,
-                              shuffle=True,
-                              pin_memory=True)
-    val_loader = DataLoader(val_data,
-                            batch_size=batch_size,
-                            shuffle=True,
-                            pin_memory=True)
+def get_data_loaders(
+        train_data : ImageClassificationDataset,
+        val_data : ImageClassificationDataset,
+        dat_cfg : Dict
+    ):
+    '''
+        Create data loaders for training and validation datasets.
+    '''
+    train_loader = DataLoader(
+        train_data,
+        batch_size=dat_cfg['loader']['batch_size'],
+        shuffle=True,
+        pin_memory=True
+    )
+    val_loader = DataLoader(
+        val_data,
+        batch_size=dat_cfg['loader']['batch_size'],
+        shuffle=True,
+        pin_memory=True
+    )
     return train_loader, val_loader
 
-
-def load_data_and_data_loaders(dataset, batch_size):
-    if dataset == 'CIFAR10':
-        training_data, validation_data = load_cifar()
-        training_loader, validation_loader = data_loaders(
-            training_data, validation_data, batch_size)
-        x_train_var = np.var(training_data.train_data / 255.0)
-
-    elif dataset == 'BLOCK':
-        training_data, validation_data = load_block()
-        training_loader, validation_loader = data_loaders(
-            training_data, validation_data, batch_size)
-
-        x_train_var = np.var(training_data.data / 255.0)
-    elif dataset == 'LATENT_BLOCK':
-        training_data, validation_data = load_latent_block()
-        training_loader, validation_loader = data_loaders(
-            training_data, validation_data, batch_size)
-
-        x_train_var = np.var(training_data.data)
-
-    else:
-        raise ValueError(
-            'Invalid dataset: only CIFAR10 and BLOCK datasets are supported.')
-
-    return training_data, validation_data, training_loader, validation_loader, x_train_var
-
-
-def readable_timestamp():
-    return time.ctime().replace('  ', ' ').replace(
-        ' ', '_').replace(':', '_').lower()
-
-
-def save_model_and_results(model, results, hyperparameters, timestamp):
-    SAVE_MODEL_PATH = os.getcwd() + '/results'
-
+def save_model_and_results(
+        save_path : str,
+        model : torch.nn.Module,
+        model_cfg : Dict,
+        train_results : Dict,
+        val_results : Dict
+    ):
+    '''
+        Save the model state and training results to a file.
+    '''
     results_to_save = {
         'model': model.state_dict(),
-        'results': results,
-        'hyperparameters': hyperparameters
+        'config': model_cfg,
+        'train_results': train_results,
+        'validation_results': val_results
     }
-    torch.save(results_to_save,
-               SAVE_MODEL_PATH + '/vqvae_data_' + timestamp + '.pth')
+    torch.save(
+        results_to_save,
+        os.path.join(
+            save_path, 'vqvae_data_' + current_datetime() + '.pth'
+        )
+    )
+
+def load_model_from_state_dict(
+        state_dict : Dict,
+        config : Optional[Dict] = None
+    ) -> Tuple[torch.nn.Module, Dict]:
+    '''
+        load model from the a .pt file
+    '''
+    if config is None:
+        config = state_dict.get('config', None)
+
+    model_cfg = config['model']
+
+    model = VQVAE(
+        model_cfg['num_hidden'],
+        model_cfg['num_residual_hidden'],
+        model_cfg['residual_layers'],
+        model_cfg['num_embeddings'],
+        model_cfg['embedding_dim'],
+        model_cfg['commitment_cost']
+    )
+
+    model.load_state_dict(state_dict['model'], strict=True)
+
+    return model, config
