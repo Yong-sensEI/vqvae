@@ -38,7 +38,7 @@ def parse_args():
     return parser.parse_args()
 
 def train(args):
-    ''' Prepare training environment '''
+    ''' Train VQ-VAE model '''
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with open(args.cfg, 'r', encoding='utf-8') as f:
@@ -106,9 +106,9 @@ def train(args):
             loss.backward()
             optimizer.step()
 
-            results["recon_errors"].append(recon_loss.cpu().detach().numpy())
-            results["perplexities"].append(perplexity.cpu().detach().numpy())
-            results["embedding_loss"].append(embedding_loss.cpu().detach().numpy())
+            results["recon_errors"].append(recon_loss.item())
+            results["perplexities"].append(perplexity.item())
+            results["embedding_loss"].append(embedding_loss.item())
 
         scheduler.step()
 
@@ -139,9 +139,9 @@ def train(args):
                 embedding_loss, x_hat, perplexity, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_eval_var
 
-            results["recon_errors"].append(recon_loss.cpu().detach().numpy())
-            results["perplexities"].append(perplexity.cpu().detach().numpy())
-            results["embedding_loss"].append(embedding_loss.cpu().detach().numpy())
+            results["recon_errors"].append(recon_loss.item())
+            results["perplexities"].append(perplexity.item())
+            results["embedding_loss"].append(embedding_loss.item())
 
         if not STOP_SIG.is_set():
             print(
