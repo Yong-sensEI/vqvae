@@ -1,11 +1,9 @@
+'''
+    Vector Quantizer for VQ-VAE
+'''
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+from torch import nn
 
 class VectorQuantizer(nn.Module):
     """
@@ -17,14 +15,28 @@ class VectorQuantizer(nn.Module):
     - beta : commitment cost used in loss term, beta * ||z_e(x)-sg[e]||^2
     """
 
-    def __init__(self, n_e, e_dim, beta):
+    def __init__(self, n_embeddings, embedding_dim, beta):
         super().__init__()
-        self.n_e = n_e
-        self.e_dim = e_dim
+        self.n_embeddings = n_embeddings
+        self.embedding_dim = embedding_dim
         self.beta = beta
 
-        self.embedding = nn.Embedding(self.n_e, self.e_dim)
-        self.embedding.weight.data.uniform_(-1.0 / self.n_e, 1.0 / self.n_e)
+        self.embedding = nn.Embedding(self.n_embeddings, self.embedding_dim)
+        self.embedding.weight.data.uniform_(
+            -1.0 / self.n_embeddings, 1.0 / self.n_embeddings
+        )
+
+        self._device = self.embedding.weight.device
+
+    @property
+    def device(self):
+        '''Get device of this module'''
+        return self._device
+
+    @device.setter
+    def device(self, value):
+        '''Set device of this module'''
+        self._device = value
 
     def forward(self, z):
         """
@@ -41,9 +53,11 @@ class VectorQuantizer(nn.Module):
             2. flatten input to (B*H*W,C)
 
         """
+        b, c, h, w = z.shape
+
         # reshape z -> (batch, height, width, channel) and flatten
         z = z.permute(0, 2, 3, 1).contiguous()
-        z_flattened = z.view(-1, self.e_dim)
+        z_flattened = z.view(-1, self.embedding_dim)
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
 
         d = torch.sum(z_flattened ** 2, dim=1, keepdim=True) + \
@@ -53,7 +67,8 @@ class VectorQuantizer(nn.Module):
         # find closest encodings
         min_encoding_indices = torch.argmin(d, dim=1).unsqueeze(1)
         min_encodings = torch.zeros(
-            min_encoding_indices.shape[0], self.n_e).to(device)
+            min_encoding_indices.shape[0], self.n_embeddings
+        ).to(self.device)
         min_encodings.scatter_(1, min_encoding_indices, 1)
 
         # get quantized latent vectors
@@ -73,4 +88,7 @@ class VectorQuantizer(nn.Module):
         # reshape back to match original input shape
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
 
-        return loss, z_q, perplexity, min_encodings, min_encoding_indices
+        return (
+            loss, z_q, perplexity, min_encodings,
+            min_encoding_indices.squeeze_().view(b, h, w)
+        )

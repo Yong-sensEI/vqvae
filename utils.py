@@ -8,9 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from yw_basics.dataloader import ImageClassificationDataset
-from yw_basics.utils import current_datetime
-
-from models.vqvae import VQVAE
+from yw_basics.utils import current_datetime, import_object
 
 def get_datasets(data_cfg : Dict):
     '''
@@ -78,7 +76,8 @@ def save_model_and_results(
         model : torch.nn.Module,
         model_cfg : Dict,
         train_results : Dict,
-        val_results : Dict
+        val_results : Dict,
+        keyword : str = ''
     ):
     '''
         Save the model state and training results to a file.
@@ -89,15 +88,17 @@ def save_model_and_results(
         'train_results': train_results,
         'validation_results': val_results
     }
+    os.makedirs(save_path, exist_ok=True)
     torch.save(
         results_to_save,
         os.path.join(
-            save_path, 'vqvae_data_' + current_datetime() + '.pth'
+            save_path, f'{keyword}_' + current_datetime() + '.pth'
         )
     )
 
 def load_model_from_state_dict(
         state_dict : Dict,
+        model_type : str,
         config : Optional[Dict] = None
     ) -> Tuple[torch.nn.Module, Dict]:
     '''
@@ -106,15 +107,8 @@ def load_model_from_state_dict(
     if config is None:
         config = state_dict.get('config', None)
 
-    model_cfg = config['model']
-
-    model = VQVAE(
-        model_cfg['num_hidden'],
-        model_cfg['num_residual_hidden'],
-        model_cfg['residual_layers'],
-        model_cfg['num_embeddings'],
-        model_cfg['embedding_dim'],
-        model_cfg['commitment_cost']
+    model = import_object(model_type)(
+        **config['model']
     )
 
     model.load_state_dict(state_dict['model'], strict=True)

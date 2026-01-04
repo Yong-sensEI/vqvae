@@ -99,6 +99,7 @@ def eval_model(
     try:
         model, cfg = load_model_from_state_dict(
             torch.load(args.model, weights_only=False),
+            'vqvae.VQVAE',
             cfg
         )
     except TypeError as e:
