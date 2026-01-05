@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime, import_object
 
+from pixelSNAIL import VQLatentSNAIL
+
 def get_datasets(data_cfg : Dict):
     '''
         Create torch dataset.
@@ -107,9 +109,23 @@ def load_model_from_state_dict(
     if config is None:
         config = state_dict.get('config', None)
 
-    model = import_object(model_type)(
-        **config['model']
-    )
+    model_type = import_object(model_type)
+
+    if model_type == VQLatentSNAIL:
+        encoder_cfg = config['encoder']
+        encoder_wgts = torch.load(
+            encoder_cfg['checkpoint'],
+            weights_only = False
+        )
+        encoder, _ = load_model_from_state_dict(
+            encoder_wgts, 'vqvae.VQVAE'
+        )
+        model = VQLatentSNAIL(
+            feature_extractor_model = encoder,
+            **config['model']
+        )
+    else:
+        model = model_type(**config['model']) 
 
     model.load_state_dict(state_dict['model'], strict=True)
 

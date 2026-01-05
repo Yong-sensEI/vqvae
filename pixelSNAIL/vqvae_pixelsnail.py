@@ -25,6 +25,11 @@ class VQLatentSNAIL(PixelSNAIL):
         self.feature_extractor_model = feature_extractor_model
         self.feature_extractor_model.eval()
 
+    def to(self, device, *args, **kwargs):
+        '''Override to() to ensure encoder to use correct device'''
+        self.feature_extractor_model.to(device)
+        super().to(device, *args, **kwargs)
+
     def retrieve_codes(self,x,cond):
         '''Retrieve discrete latent codes from VQ-VAE'''
         self.feature_extractor_model.eval()

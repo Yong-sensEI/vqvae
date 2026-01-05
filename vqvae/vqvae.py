@@ -47,8 +47,8 @@ class VQVAE(nn.Module):
 
     def to(self, device, *args, **kwargs):
         '''Override to() to ensure vector_quantization to use correct device'''
-        super().to(device, *args, **kwargs)
         self.vector_quantization.device = device
+        super().to(device, *args, **kwargs)
 
     @property
     def code_size(self):
