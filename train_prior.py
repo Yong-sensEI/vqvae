@@ -12,7 +12,6 @@ import torch
 from yw_basics.utils import import_object
 
 import utils
-from pixelSNAIL import VQLatentSNAIL
 
 STOP_SIG = threading.Event()
 
@@ -36,6 +35,7 @@ def train(args):
     with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
 
+    orig_cfg = cfg.copy()
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
@@ -62,7 +62,8 @@ def train(args):
         training_data, validation_data, data_cfg
     )
 
-    model = VQLatentSNAIL(
+    model_type = import_object(model_cfg.pop('type'))
+    model = model_type(
         feature_extractor_model = encoder,
         **model_cfg
     )
@@ -161,12 +162,13 @@ def train(args):
 
         is_final = epoch + 1 == train_cfg['epochs']
         if 'checkpoint' in train_cfg:
+            ckpt_cfg = train_cfg['checkpoint']
             if (epoch + 1) % log_interval != 0 and not is_final:
                 continue
 
             utils.save_model_and_results(
-                save_path, model, cfg, train_results, val_results,
-                'pixelsnail' + ('_final' if is_final else '')
+                save_path, model, orig_cfg, train_results, val_results,
+                ckpt_cfg.get('keyword', 'pixelsnail') + ('_final' if is_final else '')
             )
             print(f"Model saved at epoch {epoch + 1}")
 

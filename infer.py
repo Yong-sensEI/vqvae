@@ -24,9 +24,9 @@ STOP_SIG = Event()
 
 def signal_handler(_, __):
     '''
-        Handle the signal to stop training.
+        Handle the signal to stop execution.
     '''
-    print("Received stop signal, stopping training...")
+    print("Received stop signal, stopping running...")
     STOP_SIG.set()
 
 def parse_args():
@@ -66,6 +66,18 @@ def parse_args():
         '--logit-thres', type=float, required=False, default=0.0,
         help='Logit threshold to computer anomaly score'
     )
+    parser.add_argument(
+        '--save-recon', action='store_true',
+        help='Save reconstructed images'
+    )
+    parser.add_argument(
+        '--blur-ker', type=int, default=0,
+        help='Apply Gaussian blur with the given kernel size before inference'
+    )
+    parser.add_argument(
+        '--restore-num', type=int, default=0,
+        help='Number of restored images'
+    )
 
     if len(sys.argv) == 1:
         sys.argv.append("-h")
@@ -74,7 +86,13 @@ def parse_args():
     if not os.path.exists(args.data):
         raise FileNotFoundError(f"Data file {args.data} does not exist.")
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if len(args.normalize) == 0 or args.normalize.lower() == 'none' or \
+        args.normalize.lower() == 'null':
+        args.normalize = None
+
+    return args
 
 def eval_model(
         args : argparse.Namespace
@@ -95,11 +113,11 @@ def eval_model(
         except FileNotFoundError as e:
             print(f"Error loading VAE model: {e}.")
     if isinstance(args.prior_model, str):
-        print(f"Loading pixelSNAIL model from {args.prior_model}")
+        print(f"Loading prior model from {args.prior_model}")
         try:
             prior_model, prior_cfg = load_model_from_state_dict(
-                torch.load(args.prior_model, weights_only=False),
-                'pixelSNAIL.VQLatentSNAIL', None
+                torch.load(args.prior_model, weights_only = False),
+                None, None
             )
         except FileNotFoundError as e:
             print(f"Error loading prior model: {e}.")
@@ -120,6 +138,8 @@ def eval_model(
     if prior_model is not None:
         prior_model.eval()
         prior_model.to(dev)
+        if vae_model is None:
+            vae_model = prior_model.feature_extractor_model
 
     if os.path.exists(args.output) and not os.path.isdir(args.output):
         raise NotADirectoryError(
@@ -137,17 +157,27 @@ def eval_model(
         img_files = None
         label_files = args.data
 
+    trans_cfg = [
+        {
+            "type": "torchvision.transforms.v2.Resize",
+            "args": [
+                (args.img_size, args.img_size)
+            ]
+        }
+    ]
+    if args.blur_ker > 0:
+        trans_cfg.append(
+            {
+                "type": "torchvision.transforms.v2.GaussianBlur",
+                "kwargs": {
+                    "kernel_size": args.blur_ker
+                }
+            }
+        )
     dat_set = ImageClassificationDataset(
         label_files = label_files,
         image_files = img_files,
-        transforms_configs = [
-            {
-                "type": "torchvision.transforms.v2.Resize",
-                "args": [
-                    (args.img_size, args.img_size)
-                ]
-            }
-        ],
+        transforms_configs = trans_cfg,
         normalization_option = args.normalize,
         colorspace = colorspace
     )
@@ -206,10 +236,11 @@ def eval_model(
             if orig_size is not None:
                 img = cv2.resize(img, orig_size)
                 orig_img = cv2.resize(orig_img, orig_size)
-            cv2.imwrite(
-                os.path.join(args.output, img_f + '.jpg'),
-                cvt_color(img)
-            )
+            if args.save_recon or args.restore_num > 0:
+                cv2.imwrite(
+                    os.path.join(args.output, img_f + '.jpg'),
+                    cvt_color(img)
+                )
 
             losses['recon_loss'].append(
                 np.sqrt(np.mean((img - orig_img) ** 2))
@@ -224,7 +255,7 @@ def eval_model(
         if prior_model is not None:
             with torch.no_grad():
                 loss_dict = prior_model.loss(
-                    batch_dev, reduction='none'
+                    batch_dev, reduction='none', is_training = False
                 )
 
             loss = loss_dict['loss'][0]
@@ -232,6 +263,21 @@ def eval_model(
                 loss * (loss > args.logit_thres)
             ).item()
             losses['anomaly_score'].append(score)
+
+            if args.restore_num > 0:
+                restores = prior_model.restore_by_codes(
+                    loss_dict['target'],
+                    args.logit_thres,
+                    args.restore_num
+                )
+                for i, res_img in enumerate(restores):
+                    img = dat_set.image_tensor_to_numpy(res_img.cpu())
+                    if orig_size is not None:
+                        img = cv2.resize(img, orig_size)
+                    cv2.imwrite(
+                        os.path.join(args.output, img_f + f'_restore_{i}.jpg'),
+                        cvt_color(img)
+                    )
         else:
             losses['anomaly_score'].append(None)
 

@@ -1,21 +1,22 @@
 {
     "model": {
+        "type": "prior.VQLatentSNAIL",
         "code_shape": [32, 32],
         "num_channels": 128,
-        "num_blocks": 4,
-        "num_residual_blocks": 2,
+        "num_blocks": 6,
+        "num_residual_blocks": 4,
         "dropout_prob": 0.1
     },
     "encoder": {
-        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_data_2025-12-31_10-19-24.pth"
+        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_l1_final_2026-02-08_17-03-59.pth"
     },
     "train": {
         "data": {
             "train_files": [
-                "/nfs_share/tcu_dataset/train.txt"
+                "/nfs_share/tcu_dataset/tcu_good_crops/train.txt"
             ],
             "validation_files": [
-                "/nfs_share/tcu_dataset/val.txt"
+                "/nfs_share/tcu_dataset/tcu_good_crops/val.txt"
             ],
             "loader": {
                 "batch_size": 64,
@@ -44,11 +45,24 @@
                     }
                 },
                 {
+                    "type": "torchvision.transforms.v2.GaussianBlur",
+                    "kwargs": {
+                        "kernel_size": 3
+                    }
+                },                
+                {
                     "type": "torchvision.transforms.v2.RandomRotation",
                     "args": [
                         [-10, 10]
                     ]
-                }
+                },
+                {
+                    "type": "torchvision.transforms.v2.RandomAffine",
+                    "kwargs": {
+                        "degrees": 5,
+                        "scale": [0.95, 1.05]
+                    }
+                }                
             ],
             "normalization": "default",
             "colorspace": "RGB"
@@ -71,6 +85,7 @@
         },
         "checkpoint": {
             "path": "/nfs_share/tcu_dataset/checkpoints/pixelsnail/",
+            "keyword": "pixelsnail",
             "interval": 25
         }
     }

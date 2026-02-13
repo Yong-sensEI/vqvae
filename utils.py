@@ -1,7 +1,7 @@
 '''
     Utility functions for data loading, timestamp generation, and model saving.
 '''
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Union
 import os
 
 import torch
@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime, import_object
 
-from pixelSNAIL import VQLatentSNAIL
+from prior import VQLatentSNAIL, VQLatentTransformer
 
 def get_datasets(data_cfg : Dict):
     '''
@@ -99,19 +99,26 @@ def save_model_and_results(
     )
 
 def load_model_from_state_dict(
-        state_dict : Dict,
-        model_type : str,
+        state_dict : Union[Dict, str],
+        model_type : Optional[str],
         config : Optional[Dict] = None
     ) -> Tuple[torch.nn.Module, Dict]:
     '''
         load model from the a .pt file
     '''
+    if isinstance(state_dict, str):
+        state_dict = torch.load(state_dict, weights_only=False)
+
     if config is None:
         config = state_dict.get('config', None)
 
-    model_type = import_object(model_type)
+    model_cfg = config['model']
+    if isinstance(model_type, str) and len(model_type) > 0:
+        model_type = import_object(model_type)
+    else:
+        model_type = import_object(model_cfg.pop('type'))
 
-    if model_type == VQLatentSNAIL:
+    if model_type in (VQLatentSNAIL, VQLatentTransformer):
         encoder_cfg = config['encoder']
         encoder_wgts = torch.load(
             encoder_cfg['checkpoint'],
@@ -120,12 +127,12 @@ def load_model_from_state_dict(
         encoder, _ = load_model_from_state_dict(
             encoder_wgts, 'vqvae.VQVAE'
         )
-        model = VQLatentSNAIL(
+        model = model_type(
             feature_extractor_model = encoder,
-            **config['model']
+            **model_cfg
         )
     else:
-        model = model_type(**config['model']) 
+        model = model_type(**model_cfg)
 
     model.load_state_dict(state_dict['model'], strict=True)
 

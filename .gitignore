@@ -8,4 +8,6 @@ results/
 samples/
 **/*.json
 **/*.pth
+**/*.out
 reconstructions/
+**/temp

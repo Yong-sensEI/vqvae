@@ -92,3 +92,11 @@ class VectorQuantizer(nn.Module):
             loss, z_q, perplexity, min_encodings,
             min_encoding_indices.squeeze_().view(b, h, w)
         )
+
+    def embed(self, indices : torch.Tensor) -> torch.Tensor:
+        ''' 
+            Return an embedding vector from codebook indices
+            indices shape is (B, H, W)
+            return (B, C, H, W) C is number of embeddings
+        '''
+        return self.embedding(indices).permute(0, 3, 1, 2).contiguous()

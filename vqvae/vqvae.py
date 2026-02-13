@@ -90,19 +90,17 @@ class VQVAE(nn.Module):
         z_e = self.pre_quantization_conv(z_e)
         return z_e
 
-    def forward(self, x, verbose=False):
+    def decode(self, z):
+        ''' decode code'''
+        return self.decode(z)
+
+    def forward(self, x):
         '''Forward pass through VQ-VAE'''
         z_e = self.encoder(x)
         z_e = self.pre_quantization_conv(z_e)
         embedding_loss, z_q, perplexity, _, embed_indices = self.vector_quantization(
             z_e)
         x_hat = self.decoder(z_q)
-
-        if verbose:
-            print('original data shape:', x.shape)
-            print('encoded data shape:', z_e.shape)
-            print('recon data shape:', x_hat.shape)
-            assert False
 
         return embedding_loss, x_hat, perplexity, embed_indices
 

@@ -36,6 +36,7 @@ def train(args):
     with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
 
+    orig_cfg = cfg.copy()
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
@@ -43,10 +44,14 @@ def train(args):
     # Load data and define batch data loaders
     training_data, validation_data = utils.get_datasets(data_cfg)
 
-    x_train_var = utils.get_data_variance(training_data, 1000)
-    x_eval_var = utils.get_data_variance(validation_data, 1000)
-    print(f'Training data variance: {x_train_var:.4f}')
-    print(f'Validation data variance: {x_eval_var:.4f}')
+    loss_type = train_cfg.get('loss_type', 'l2')
+    if loss_type == 'l2':
+        x_train_var = utils.get_data_variance(training_data, 1000)
+        x_eval_var = utils.get_data_variance(validation_data, 1000)
+        print(f'Training data variance: {x_train_var:.4f}')
+        print(f'Validation data variance: {x_eval_var:.4f}')
+    else:
+        x_train_var, x_eval_var = None, None
 
     training_loader, validation_loader = utils.get_data_loaders(
         training_data, validation_data, data_cfg
@@ -92,7 +97,8 @@ def train(args):
             optimizer.zero_grad()
 
             embedding_loss, x_hat, perplexity, _ = model(x)
-            recon_loss = torch.mean((x_hat - x)**2) / x_train_var
+            recon_loss = torch.mean((x_hat - x)**2) / x_train_var \
+                if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
             loss = recon_loss + embedding_loss
 
             loss.backward()
@@ -129,7 +135,8 @@ def train(args):
 
             with torch.no_grad():
                 embedding_loss, x_hat, perplexity, _ = model(x)
-            recon_loss = torch.mean((x_hat - x)**2) / x_eval_var
+            recon_loss = torch.mean((x_hat - x)**2) / x_eval_var \
+                if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
 
             results["recon_errors"].append(recon_loss.item())
             results["perplexities"].append(perplexity.item())
@@ -158,12 +165,13 @@ def train(args):
 
         is_final = epoch + 1 == train_cfg['epochs']
         if 'checkpoint' in train_cfg:
+            ckpt_cfg = train_cfg['checkpoint']
             if (epoch + 1) % log_interval != 0 and not is_final:
                 continue
 
             utils.save_model_and_results(
-                save_path, model, cfg, train_results, val_results,
-                'vqvae' + ('_final' if is_final else '')
+                save_path, model, orig_cfg, train_results, val_results,
+                ckpt_cfg.get('keyword', 'vqvae') + ('_final' if is_final else '')
             )
             print(f"Model saved at epoch {epoch + 1}")
 
