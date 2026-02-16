@@ -36,7 +36,7 @@ class VQLatentSNAIL(VQLatentPriorModel):
         return OrderedDict(
             loss = nll,
             logits = logits,
-            pred = torch.argmax(logits, dim=1),
+            pred = torch.argmax(logits, dim = 1),
             target = code
         )
 

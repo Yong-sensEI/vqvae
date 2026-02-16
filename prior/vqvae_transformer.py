@@ -2,8 +2,8 @@
     Transformer to learn VQ-VAE's latent prior distribution
 '''
 
+import numpy as np
 import torch
-from torch import nn
 from torch.nn import functional as F
 
 from .base import VQLatentPriorModel
@@ -62,17 +62,23 @@ class VQLatentTransformer(VQLatentPriorModel):
                 outp[~mask], inp[~mask], reduction = 'sum', **kwargs
             ) * self._beta
             if reduction == 'mean':
-                loss_t /= (codes.size(1) * codes.size(1))
+                loss_t /= np.prod(codes.shape)
         else:
-            outp = self.prior_model.forward(inp, mask = None)
-            loss_t = F.cross_entropy(outp, inp, reduction = reduction, **kwargs)
+            with torch.no_grad():
+                outp = self.prior_model.forward(inp, mask = None)
+                loss_t = F.cross_entropy(
+                    outp.transpose(-1, 1),
+                    inp.transpose(-1, 1),
+                    reduction = reduction,
+                    **kwargs
+                )
 
         logits = outp.view(*codes.shape, -1)
 
         return {
             'loss': loss_t,
-            'logitd': logits,
-            'pred': torch.argmax(logits, dim = 3),
+            'logits': logits,
+            'pred': torch.argmax(logits, dim = -1),
             'target': codes
         }
 
@@ -93,30 +99,29 @@ class VQLatentTransformer(VQLatentPriorModel):
             logit_threshold : float,
             num_reconstructions : int = 1
         ) -> torch.Tensor:
+        lead_dim = codes.size(0) * num_reconstructions
         with torch.no_grad():
             flat_codes = codes.view(codes.size(0), -1).unsqueeze(1).repeat(
                 1, num_reconstructions, 1
-            ).reshape(
-                codes.size(0) * num_reconstructions, -1
-            )
+            ).reshape(lead_dim, -1)
             inp = self.to_onehot(flat_codes)
             outp = self.prior_model.forward(
                 inp, None
             )
-            probs = F.softmax(outp, dim = 2)
+            probs = F.softmax(outp, dim = -1)
             loss = F.cross_entropy(
-                outp.transpose(1, 2), inp.transpose(1, 2), reduction = 'none'
+                outp.transpose(-1, 1),
+                inp.transpose(-1, 1),
+                reduction = 'none'
             )
             err_mask = loss > logit_threshold
-            flat_codes[err_mask] = torch.multinomial(
-                probs[err_mask], 1
-            ).squeeze(-1)
+            if torch.any(err_mask):
+                flat_codes[err_mask] = torch.multinomial(
+                    probs[err_mask], 1
+                ).squeeze(-1)
 
             z = self.feature_extractor_model.vector_quantization.embed(
-                flat_codes.view(
-                    num_reconstructions*codes.size(0),
-                    *codes.shape[1:]
-                )
+                flat_codes.view(lead_dim, *codes.shape[1:])
             )
             img_recon = torch.cat([
                 self.feature_extractor_model.decoder(

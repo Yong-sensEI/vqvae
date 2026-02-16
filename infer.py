@@ -70,10 +70,10 @@ def parse_args():
         '--save-recon', action='store_true',
         help='Save reconstructed images'
     )
-    parser.add_argument(
-        '--blur-ker', type=int, default=0,
-        help='Apply Gaussian blur with the given kernel size before inference'
-    )
+    #parser.add_argument(
+    #    '--blur-ker', type=int, default=0,
+    #    help='Apply Gaussian blur with the given kernel size before inference'
+    #)
     parser.add_argument(
         '--restore-num', type=int, default=0,
         help='Number of restored images'
@@ -165,15 +165,15 @@ def eval_model(
             ]
         }
     ]
-    if args.blur_ker > 0:
-        trans_cfg.append(
-            {
-                "type": "torchvision.transforms.v2.GaussianBlur",
-                "kwargs": {
-                    "kernel_size": args.blur_ker
-                }
-            }
-        )
+    #if args.blur_ker > 0:
+    #    trans_cfg.append(
+    #        {
+    #            "type": "torchvision.transforms.v2.GaussianBlur",
+    #            "kwargs": {
+    #                "kernel_size": args.blur_ker
+    #            }
+    #        }
+    #    )
     dat_set = ImageClassificationDataset(
         label_files = label_files,
         image_files = img_files,

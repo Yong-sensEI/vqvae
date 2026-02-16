@@ -1,14 +1,14 @@
 {
     "model": {
         "type": "prior.VQLatentSNAIL",
-        "code_shape": [32, 32],
+        "code_shape": [32,32],
         "num_channels": 128,
         "num_blocks": 6,
         "num_residual_blocks": 4,
         "dropout_prob": 0.1
     },
     "encoder": {
-        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_l1_final_2026-02-08_17-03-59.pth"
+        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_tcu_l1_128x128_final_2026-02-15_15-35-48.pth"
     },
     "train": {
         "data": {
@@ -43,13 +43,7 @@
                         "saturation": 0.2, 
                         "hue": 0.3
                     }
-                },
-                {
-                    "type": "torchvision.transforms.v2.GaussianBlur",
-                    "kwargs": {
-                        "kernel_size": 3
-                    }
-                },                
+                },               
                 {
                     "type": "torchvision.transforms.v2.RandomRotation",
                     "args": [

@@ -26,7 +26,7 @@ def signal_handler(_, __):
 def parse_args():
     ''' Parse command line arguments '''
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=str, required=True)
+    parser.add_argument("-c", "--cfg", type=str, required=True)
     return parser.parse_args()
 
 def train(args):

@@ -4,6 +4,7 @@ import argparse
 import threading
 import json
 import signal
+import copy
 
 from tqdm import tqdm
 import numpy as np
@@ -25,7 +26,7 @@ def signal_handler(_, __):
 def parse_args():
     ''' Parse command line arguments '''
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cfg", type=str, required=True)
+    parser.add_argument("-c", "--cfg", type=str, required=True)
     return parser.parse_args()
 
 def train(args):
@@ -35,7 +36,7 @@ def train(args):
     with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
 
-    orig_cfg = cfg.copy()
+    orig_cfg = copy.deepcopy(cfg)
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']

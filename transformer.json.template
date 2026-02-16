@@ -6,10 +6,12 @@
         "num_encoder_layers": 4,
         "mask_prob": 0.1,
         "mask_tamper": false,
-        "beta": 0.01
+        "beta": 0.01,
+        "activation": "gelu",
+        "positional_encoding": "sinusoidal"
     },
     "encoder": {
-        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_l1_final_2026-02-08_17-03-59.pth"
+        "checkpoint": "/nfs_share/tcu_dataset/checkpoints/vqvae/vqvae_tcu_l1_128x128_final_2026-02-16_01-21-12.pth"
     },
     "train": {
         "data": {
@@ -44,13 +46,7 @@
                         "saturation": 0.2, 
                         "hue": 0.3
                     }
-                },
-                {
-                    "type": "torchvision.transforms.v2.GaussianBlur",
-                    "kwargs": {
-                        "kernel_size": 3
-                    }
-                },                
+                },             
                 {
                     "type": "torchvision.transforms.v2.RandomRotation",
                     "args": [
@@ -74,7 +70,7 @@
         "optimizer": {
             "type": "torch.optim.AdamW",
             "kwargs": {
-                "lr": 1e-3
+                "lr": 1e-4
             }
         },
         "scheduler": {

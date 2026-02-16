@@ -55,7 +55,7 @@
                     }
                 }
             ],
-            "normalization": null,
+            "normalization": "default",
             "colorspace": "RGB"
         },
         "epochs": 100,
@@ -77,8 +77,8 @@
         },
         "checkpoint": {
             "path": "/nfs_share/tcu_dataset/checkpoints/vqvae/",
-            "keyword": "vqvae_l1",
-            "interval": 25
+            "interval": 25,
+            "keyword": "vqvae_tcu_l1_128x128"
         },
         "loss_type": "l1"
     }
