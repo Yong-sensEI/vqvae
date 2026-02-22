@@ -69,6 +69,7 @@ class VQVAE(nn.Module):
     def num_residual_hidden(self):
         '''the hidden dimension of the residual blocks'''
         return self.res_h_dim
+
     @property
     def residual_layers(self):
         '''number of residual layers'''

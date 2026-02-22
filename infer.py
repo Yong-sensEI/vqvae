@@ -59,12 +59,12 @@ def parse_args():
         help="Device to run the evaluation on (default: 'cuda')."
     )
     parser.add_argument(
-        "--normalize", type=str, required=False, default='default',
-        help="Normalization method to use (default: 'default')."
-    )
-    parser.add_argument(
         '--logit-thres', type=float, required=False, default=0.0,
         help='Logit threshold to computer anomaly score'
+    )
+    parser.add_argument(
+        '--rel-thres', action='store_true',
+        help='Logit threshold is a relative percentile'
     )
     parser.add_argument(
         '--save-recon', action='store_true',
@@ -78,6 +78,10 @@ def parse_args():
         '--restore-num', type=int, default=0,
         help='Number of restored images'
     )
+    parser.add_argument(
+        '--restore-iters', type=int, default=1,
+        help='Number of compute iterations for restoration'
+    )
 
     if len(sys.argv) == 1:
         sys.argv.append("-h")
@@ -86,11 +90,8 @@ def parse_args():
     if not os.path.exists(args.data):
         raise FileNotFoundError(f"Data file {args.data} does not exist.")
 
-    args = parser.parse_args()
-
-    if len(args.normalize) == 0 or args.normalize.lower() == 'none' or \
-        args.normalize.lower() == 'null':
-        args.normalize = None
+    if args.rel_thres and not 0 < args.logit_thres < 1:
+        raise ValueError('Invalid logit percentile threshold')
 
     return args
 
@@ -128,8 +129,10 @@ def eval_model(
 
     if isinstance(vae_cfg, dict):
         colorspace = vae_cfg['train']['data'].get('colorspace', None)
+        norm_opt = vae_cfg['train']['data'].get('normalization', 'default')
     else:
         colorspace = prior_cfg['train']['data'].get('colorspace', None)
+        norm_opt = prior_cfg['train']['data'].get('normalization', 'default')
 
     dev = torch.device(args.device)
     if vae_model is not None:
@@ -178,7 +181,7 @@ def eval_model(
         label_files = label_files,
         image_files = img_files,
         transforms_configs = trans_cfg,
-        normalization_option = args.normalize,
+        normalization_option = norm_opt,
         colorspace = colorspace
     )
     print(f'Loaded {len(dat_set)} images for inference.')
@@ -268,7 +271,9 @@ def eval_model(
                 restores = prior_model.restore_by_codes(
                     loss_dict['target'],
                     args.logit_thres,
-                    args.restore_num
+                    args.restore_num,
+                    args.rel_thres,
+                    n_iters = args.restore_iters
                 )
                 for i, res_img in enumerate(restores):
                     img = dat_set.image_tensor_to_numpy(res_img.cpu())

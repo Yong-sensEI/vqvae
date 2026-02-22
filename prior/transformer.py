@@ -8,6 +8,8 @@ import numpy as np
 import torch
 from torch import nn
 
+from .base import PriorModel
+
 class LearnedPositionalEncoding(nn.Module):
     ''' For positional embedding '''
     def __init__(self, max_seq_len : int, dim : int):
@@ -50,7 +52,7 @@ class SinusoidalPositionalEmbedding(nn.Module):
         ''' x shape: [batch_size, seq_len, dim] '''
         return x + self.pe[:, :x.size(1), :]
 
-class PriorTransformer(nn.Module):
+class PriorTransformer(PriorModel):
     ''' a transformer learns prior distribution of sequences '''
     def __init__(
             self,
@@ -61,7 +63,11 @@ class PriorTransformer(nn.Module):
             positional_encoding : str = 'sinusoidal',
             **kwargs
         ):
-        super().__init__()
+        super().__init__(
+            in_channels = in_channels,
+            code_shape = code_shape
+        )
+
         _encoder = nn.TransformerEncoderLayer(
             d_model = in_channels,
             nhead = num_heads,

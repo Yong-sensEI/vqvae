@@ -7,8 +7,9 @@ from torch import nn
 import torch.nn.functional as F
 
 from .nn_blocks import PixelBlock, MaskedConv, WNConv2d
+from .base import PriorModel
 
-class PixelSNAIL(nn.Module):
+class PixelSNAIL(PriorModel):
     '''
         PixelSNAIL model as described in
         "PixelSNAIL: An Improved Autoregressive Generative Model"
@@ -26,12 +27,14 @@ class PixelSNAIL(nn.Module):
             downsample = 1,
             non_linearity = F.elu
         ):
-        super().__init__()
+        super().__init__(
+            in_channels = in_channels,
+            code_shape = code_shape
+        )
 
         self.non_linearity = non_linearity
         height, width = code_shape
 
-        self.in_chan = in_channels
         self.cond_channels = cond_channels
         self.ini_conv = MaskedConv(
             in_channels,
@@ -73,16 +76,16 @@ class PixelSNAIL(nn.Module):
 
         self.out = WNConv2d(num_channels, in_channels, 1)
 
-    def forward(self, x, cond=None):
+    def forward(self, x, cond = None):
         '''forward pass of PixelSNAIL'''
         x = F.one_hot( # pylint: disable=E1102
-                x, self.in_chan
+                x, self.in_channels
             ).permute(0, 3, 1, 2).type_as(self.background)
 
+        out = self.ini_conv(x)
         if self.cond_channels is not None:
             cond = cond.float()
-
-        out = self.ini_conv(x)
+            cond = self.ini_conv(cond)
 
         batch, _, height, width = out.shape
         background = self.background.expand(batch, -1, -1, -1)
@@ -103,7 +106,7 @@ class PixelSNAIL(nn.Module):
         nll = F.cross_entropy(logits, x,reduction=reduction)
         return OrderedDict(loss=nll)
 
-    def sample(self, n, img_size = (64,64), cond = None):
+    def sample(self, n, img_size, cond = None):
         '''generates samples from the model'''
         device = next(self.parameters()).device
         samples = torch.zeros(n, *img_size).long().to(device)
@@ -111,9 +114,9 @@ class PixelSNAIL(nn.Module):
             for r in range(img_size[0]):
                 for c in range(img_size[1]):
                     if self.cond_channels is not None:
-                        logits = self(samples,cond)[:, :, r, c]
+                        logits = self(samples, cond)[:, :, r, c]
                     else:
                         logits = self(samples)[:, :, r, c]
                     probs = F.softmax(logits, dim=1)
                     samples[:, r, c] = torch.multinomial(probs, 1).squeeze(-1)
-        return samples.cpu().numpy()
+        return samples

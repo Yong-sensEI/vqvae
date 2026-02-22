@@ -40,11 +40,13 @@ def train(args):
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
+    loss_cfg = train_cfg.get('loss', {})
 
     # Load data and define batch data loaders
     training_data, validation_data = utils.get_datasets(data_cfg)
 
-    loss_type = train_cfg.get('loss_type', 'l2')
+    loss_type = loss_cfg.get('type', 'l1')
+    commitment_weight = loss_cfg.get('commitment_weight', 1.0)
     if loss_type == 'l2':
         x_train_var = utils.get_data_variance(training_data, 1000)
         x_eval_var = utils.get_data_variance(validation_data, 1000)
@@ -99,7 +101,7 @@ def train(args):
             embedding_loss, x_hat, perplexity, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_train_var \
                 if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
-            loss = recon_loss + embedding_loss
+            loss = recon_loss + embedding_loss * commitment_weight
 
             loss.backward()
             optimizer.step()
