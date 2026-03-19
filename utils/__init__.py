@@ -3,6 +3,7 @@
 '''
 from typing import Dict, Optional, Tuple, Union
 import os
+import random
 
 import torch
 from torch.utils.data import DataLoader
@@ -10,7 +11,7 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime, import_object
 
-from prior import VQLatentSNAIL, VQLatentTransformer
+from models.prior import VQLatentSNAIL, VQLatentTransformer
 
 def get_datasets(data_cfg : Dict):
     '''
@@ -102,7 +103,7 @@ def load_model_from_state_dict(
         state_dict : Union[Dict, str],
         model_type : Optional[str],
         config : Optional[Dict] = None
-    ) -> Tuple[torch.nn.Module, Dict]:
+    ) -> Tuple[torch.nn.Module, Optional[Dict]]:
     '''
         load model from the a .pt file
     '''
@@ -125,7 +126,7 @@ def load_model_from_state_dict(
             weights_only = False
         )
         encoder, _ = load_model_from_state_dict(
-            encoder_wgts, 'vqvae.VQVAE'
+            encoder_wgts, None
         )
         model = model_type(
             feature_extractor_model = encoder,

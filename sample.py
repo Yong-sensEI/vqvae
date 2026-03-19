@@ -17,7 +17,7 @@ import torch
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
 
 from utils import load_model_from_state_dict
-from prior.base import VQLatentPriorModel
+from models.prior.base import VQLatentPriorModel
 
 STOP_SIG = threading.Event()
 
@@ -35,7 +35,8 @@ def gen_images(
     image_chw : Optional[Tuple[int, int, int]] = None,
     condition_image_file : Optional[str] = None,
     num_samples : int = 1,
-    device : Optional[torch.device] = None
+    device : Optional[torch.device] = None,
+    **kwargs
 ) -> None:
     '''
     Generate images, potentially based on a conditional image
@@ -56,7 +57,7 @@ def gen_images(
     if cond is not None:
         cond.to(dev)
 
-    img_tensors = model.sample(num_samples, cond, image_chw).detach().cpu()
+    img_tensors = model.sample(num_samples, cond, image_chw, **kwargs).detach().cpu()
     imgs = normalizer.tensor_to_image(img_tensors)
 
     if isinstance(imgs, Image.Image):
@@ -93,12 +94,20 @@ def parse_args():
         help="Device to run the evaluation on (default: 'cuda')."
     )
     parser.add_argument(
+        "--kwargs", type=str, nargs='*', default=[],
+        help="Device to run the evaluation on (default: 'cuda')."
+    )
+    parser.add_argument(
         "-i", "--images", type=str, required=False,
         help="Conditional images"
     )
     parser.add_argument(
         "-n", "--num-images", type=int, default=1,
-        help="Number of images to be generated"
+        help="Number of unconditional images to be generated"
+    )
+    parser.add_argument(
+        "-b", "--batch-size", type=int, default=1,
+        help="Number of samples per image"
     )
 
     if len(sys.argv) == 1:
@@ -118,7 +127,7 @@ def main():
     dev = torch.device(args.device)
 
     if args.images is None or os.path.isfile(args.images):
-        img_files = [args.images]
+        img_files = [args.images] * args.num_images
     else:
         if os.path.isdir(args.images):
             args.images = os.path.join(args.images, "*.*")
@@ -136,13 +145,14 @@ def main():
     )
 
     signal.signal(signal.SIGINT, signal_handler)
+    kwargs = dict(kv.split('=') for kv in args.kwargs)
     for img_f in tqdm(img_files):
         if STOP_SIG.is_set():
             break
 
         gen_images(
             model, normalizer, args.output_dir, args.input_chw,
-            img_f, args.num_images, dev
+            img_f, args.batch_size, dev, **kwargs
         )
 
 if __name__ == '__main__':

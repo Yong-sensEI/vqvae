@@ -6,7 +6,7 @@ import argparse
 import sys
 
 import torch
-    
+
 def update_cfg(
         model_file : str,
         keychain : str,

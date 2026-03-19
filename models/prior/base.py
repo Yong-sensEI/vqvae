@@ -7,6 +7,9 @@ from abc import abstractmethod
 
 import torch
 from torch import nn
+from torch.nn import functional as F
+
+from ..vqvae import VQVAE
 
 class PriorModel(nn.Module):
     '''
@@ -26,13 +29,14 @@ class PriorModel(nn.Module):
         ''' To be implemented '''
         raise NotImplementedError
 
+
 class VQLatentPriorModel(nn.Module):
     '''
         Transformer model leanring prior in the latent space of a VQ-VAE
     '''
     def __init__(
             self,
-            feature_extractor_model : nn.Module,
+            feature_extractor_model : VQVAE,
             prior_model : Union[PriorModel, Type],
             code_shape : Tuple[int, int],
             **kwargs
@@ -48,9 +52,9 @@ class VQLatentPriorModel(nn.Module):
             if prior_model.in_channels != feature_extractor_model.code_size or \
                 prior_model.code_shape != tuple(code_shape):
                 raise ValueError('Incompatible prior model')
-            self.prior_model = prior_model
+            self.prior_model : PriorModel = prior_model
         elif isinstance(prior_model, type):
-            self.prior_model = prior_model(
+            self.prior_model : PriorModel = prior_model(
                 in_channels = feature_extractor_model.code_size,
                 code_shape = code_shape,
                 **kwargs
@@ -100,7 +104,8 @@ class VQLatentPriorModel(nn.Module):
             logit_threshold : float,
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
-            n_iters : int = 1
+            n_iters : int = 1,
+            **kwargs
         ) -> torch.Tensor:
         '''
             Restore from codes by removing unlikely codes
@@ -112,14 +117,16 @@ class VQLatentPriorModel(nn.Module):
         logit_threshold : float,
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
-        n_iters : int = 1
+        n_iters : int = 1,
+        **kwargs
     ) -> torch.Tensor:
         ''' Restore by embedding codes'''
         return self._restore_abnormal(
             codes, logit_threshold,
             num_reconstructions = num_reconstructions,
             is_thres_quantile = is_thres_quantile,
-            n_iters = n_iters
+            n_iters = n_iters,
+            **kwargs
         )
 
     def restore_images(
@@ -128,7 +135,8 @@ class VQLatentPriorModel(nn.Module):
         logit_threshold : float,
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
-        n_iters : int = 1
+        n_iters : int = 1,
+        **kwargs
     ) -> torch.Tensor:
         ''' Restore images'''
         codes = self.retrieve_codes(images, None)
@@ -136,7 +144,8 @@ class VQLatentPriorModel(nn.Module):
             codes, logit_threshold,
             num_reconstructions = num_reconstructions,
             is_thres_quantile = is_thres_quantile,
-            n_iters = n_iters
+            n_iters = n_iters,
+            **kwargs
         )
 
     def _batch_cond(
@@ -144,7 +153,7 @@ class VQLatentPriorModel(nn.Module):
         num_images : int,
         cond : Optional[torch.Tensor] = None,
         expected_dim : int = 3
-    ) -> torch.Tensor:
+    ) -> Optional[torch.Tensor]:
         ''' make cond's batch size compatible '''
         if cond is None:
             return None
@@ -173,3 +182,24 @@ class VQLatentPriorModel(nn.Module):
         '''
         generates samples from the model. 'cond' is a conditional image
         '''
+
+    def pixelwise_anomaly_score(
+            self,
+            images : torch.Tensor,
+            logit_threshold : float,
+            num_reconstructions : int = 1,
+            is_thres_quantile : bool = False,
+            **kwargs
+        ) -> torch.Tensor:
+        ''' compute pixel-wise anomaly score'''
+        x_0 = self.feature_extractor_model.reconstruct(images).unsqueeze(1)
+        recons = self.restore_images(
+            images, logit_threshold, num_reconstructions,
+            is_thres_quantile = is_thres_quantile, **kwargs
+        ).view(images.size(0), num_reconstructions, *images.shape[1:])
+        diff = torch.abs(x_0 - recons)
+        weights = F.softmax(
+            1.0 / diff.sum(dim=tuple(range(2, diff.dim()))), dim = 1
+        )
+        scores = (weights.view(weights.size(0), -1, 1, 1) * diff).sum(dim = 1).clamp(0, 1)
+        return scores

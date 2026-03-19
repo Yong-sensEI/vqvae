@@ -4,6 +4,8 @@ import argparse
 import threading
 import json
 import signal
+import copy
+import os
 
 from tqdm import tqdm
 import numpy as np
@@ -12,7 +14,6 @@ import torch
 from yw_basics.utils import import_object
 
 import utils
-from vqvae import VQVAE
 
 STOP_SIG = threading.Event()
 
@@ -36,7 +37,7 @@ def train(args):
     with open(args.cfg, 'r', encoding='utf-8') as f:
         cfg = json.load(f)
 
-    orig_cfg = cfg.copy()
+    orig_cfg = copy.deepcopy(cfg)
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
@@ -64,9 +65,9 @@ def train(args):
             model_cfg['checkpoint'],
             weights_only = False
         )
-        model, _ = utils.load_model_from_state_dict(ckpt, 'vqvae.VQVAE', None)
+        model, _ = utils.load_model_from_state_dict(ckpt, None, None)
     else:
-        model = VQVAE(**model_cfg)
+        model = import_object(model_cfg.pop('type'))(**model_cfg)
     model.to(device)
 
     # Set up optimizer and training loop
@@ -98,7 +99,7 @@ def train(args):
             x = x.to(device)
             optimizer.zero_grad()
 
-            embedding_loss, x_hat, perplexity, _ = model(x)
+            embedding_loss, x_hat, perplexity, _, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_train_var \
                 if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
             loss = recon_loss + embedding_loss * commitment_weight
@@ -136,7 +137,7 @@ def train(args):
             x = x.to(device)
 
             with torch.no_grad():
-                embedding_loss, x_hat, perplexity, _ = model(x)
+                embedding_loss, x_hat, perplexity, _, _ = model(x)
             recon_loss = torch.mean((x_hat - x)**2) / x_eval_var \
                 if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
 
@@ -171,11 +172,11 @@ def train(args):
             if (epoch + 1) % log_interval != 0 and not is_final:
                 continue
 
+            fn = ckpt_cfg.get('keyword', 'vqvae') + ('_final' if is_final else '')
             utils.save_model_and_results(
-                save_path, model, orig_cfg, train_results, val_results,
-                ckpt_cfg.get('keyword', 'vqvae') + ('_final' if is_final else '')
+                save_path, model, orig_cfg, train_results, val_results, fn
             )
-            print(f"Model saved at epoch {epoch + 1}")
+            print(f"Model saved at epoch {epoch + 1} in {os.path.join(save_path, fn)}")
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)

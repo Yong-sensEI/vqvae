@@ -1,6 +1,6 @@
 {
     "model": {
-        "type": "prior.VQLatentTransformer",
+        "type": "models.prior.VQLatentTransformer",
         "code_shape": [32, 32],
         "num_heads": 8,
         "num_encoder_layers": 4,

@@ -6,17 +6,17 @@ from typing import Optional, Tuple
 
 import numpy as np
 import torch
-from torch import nn
 from torch.nn import functional as F
 
 from .base import VQLatentPriorModel
 from .transformer import PriorTransformer
+from ..vqvae import VQVAE
 
 class VQLatentTransformer(VQLatentPriorModel):
     '''
         Transformer model leanring prior in the latent space of a VQ-VAE
     '''
-    def __init__(self, feature_extractor_model : nn.Module, **kwargs):
+    def __init__(self, feature_extractor_model : VQVAE, **kwargs):
         self._p_mask = kwargs.pop('mask_prob', 0.1)
         self._beta = kwargs.pop('beta', 0.01)
         self._use_tamper_mask = kwargs.pop('mask_tamper', True)
@@ -91,10 +91,11 @@ class VQLatentTransformer(VQLatentPriorModel):
         r_mask = torch.rand(x.shape).to(x.device)
         mask = r_mask < self._p_mask
         mask.requires_grad = False
+        len_mask = mask.sum().item()
         x[mask] = torch.randint(
             low = 0,
             high = self.feature_extractor_model.code_size,
-            size = (torch.sum(mask).item(),)
+            size = (len_mask,)
         ).to(x.device)
         return x, mask
 
@@ -104,7 +105,8 @@ class VQLatentTransformer(VQLatentPriorModel):
             logit_threshold : float,
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
-            n_iters : int = 1
+            n_iters : int = 1,
+            resample_option : str = 'all'
         ) -> torch.Tensor:
         lead_dim = codes.size(0) * num_reconstructions
         with torch.no_grad():
@@ -131,9 +133,22 @@ class VQLatentTransformer(VQLatentPriorModel):
                             if self._use_tamper_mask else outp,
                         dim = -1
                     )
-                    flat_codes[err_mask] = torch.multinomial(
-                        probs[err_mask], 1
-                    ).squeeze(-1)
+                    if resample_option == 'all':
+                        flat_codes[:] = torch.multinomial(
+                            probs.view(
+                                -1, self.feature_extractor_model.code_size
+                            ), 1
+                        ).view(lead_dim, -1)
+                    elif resample_option == 'abnormal':
+                        flat_codes[err_mask] = torch.multinomial(
+                            probs[err_mask], 1
+                        ).squeeze(-1)
+                    elif resample_option == 'normal':
+                        flat_codes[~err_mask] = torch.multinomial(
+                            probs[~err_mask], 1
+                        ).squeeze(-1)
+                    else:
+                        raise ValueError('Invalid resample option')
                 else:
                     break
 
@@ -154,13 +169,12 @@ class VQLatentTransformer(VQLatentPriorModel):
             image_chw : Optional[Tuple[int, int, int]] = None,
             **kwargs
         ):
-        loss_quantile = kwargs.get('loss_quantile', 0.67)
-
         dev = next(self.parameters()).device
         if cond is None:
             assert image_chw is not None, 'Require input image shape'
             cond = torch.rand(num_images, *image_chw).to(dev)
             n_iters = kwargs.get('n_iters', 3)
+            loss_quantile = kwargs.get('loss_quantile', 0.1)
         else:
             assert isinstance(cond, torch.Tensor)
             if image_chw is not None:
@@ -168,6 +182,7 @@ class VQLatentTransformer(VQLatentPriorModel):
                     'Incompatible conditional shape'
             cond = self._batch_cond(num_images, cond, expected_dim = 4).to(dev)
             n_iters = kwargs.get('n_iters', 1)
+            loss_quantile = kwargs.get('loss_quantile', 0.75)
 
         with torch.no_grad():
             codes = self.retrieve_codes(cond, None)
@@ -177,5 +192,32 @@ class VQLatentTransformer(VQLatentPriorModel):
             logit_threshold = loss_quantile,
             num_reconstructions = 1,
             is_thres_quantile = True,
-            n_iters = n_iters
+            n_iters = n_iters,
+            resample_option = 'all'
+        )
+
+    def mix_sample(self, num_images : int, conds : torch.Tensor, **kwargs):
+        ''' 
+        mix multiple conditional images to generate new images
+        conds: conditional images of shape (num_conds, C, H, W)
+        '''
+        dev = next(self.parameters()).device
+
+        with torch.no_grad():
+            codes = self.retrieve_codes(conds.to(dev), None)
+            flat_codes = codes.view(codes.size(0), -1)
+            probs = F.softmax(
+                self.prior_model.forward(self.to_onehot(flat_codes), None),
+                dim = -1,
+            ).mean(dim = 0)
+            mix_codes = torch.multinomial(
+                probs, num_images, replacement = True
+            ).view(codes.size(1), codes.size(2), num_images).permute(2, 0, 1)
+
+        return self._restore_abnormal(
+            mix_codes,
+            logit_threshold = kwargs.get('loss_quantile', 0.8),
+            num_reconstructions = 1,
+            is_thres_quantile = True,
+            n_iters = kwargs.get('n_iters', 3)
         )

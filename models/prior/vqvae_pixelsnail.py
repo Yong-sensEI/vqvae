@@ -6,17 +6,17 @@ from typing import Optional, Any, Tuple
 from collections import OrderedDict
 
 import torch
-from torch import nn
 from torch.nn import functional as F
 
 from .pixelsnail import PixelSNAIL
 from .base import VQLatentPriorModel
+from ..vqvae import VQVAE
 
 class VQLatentSNAIL(VQLatentPriorModel):
     '''
         PixelSNAIL model operating in the latent space of a VQ-VAE
     '''
-    def __init__(self, feature_extractor_model : nn.Module, **kwargs):
+    def __init__(self, feature_extractor_model : VQVAE, **kwargs):
         super().__init__(
             feature_extractor_model = feature_extractor_model,
             prior_model = PixelSNAIL,
@@ -50,6 +50,7 @@ class VQLatentSNAIL(VQLatentPriorModel):
             **kwargs
         ):
         ''' sample images '''
+        assert isinstance(self.prior_model, PixelSNAIL)
         dev = next(self.parameters()).device
         if cond is not None:
             cond = self.retrieve_codes(
@@ -72,7 +73,8 @@ class VQLatentSNAIL(VQLatentPriorModel):
             logit_threshold : float,
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
-            n_iters : int = 1
+            n_iters : int = 1,
+            **kwargs
         ) -> torch.Tensor:
         code_size = codes.shape[-2:]
 

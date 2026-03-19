@@ -29,7 +29,7 @@ class VQVAEWrapper(nn.Module):
         super().__init__()
         state_dict = torch.load(model_path, weights_only=False, map_location=device)
         self.model, _ = load_model_from_state_dict(
-            state_dict, 'vqvae.VQVAE'
+            state_dict, None
         )
         self.model.eval()
         self.device = device

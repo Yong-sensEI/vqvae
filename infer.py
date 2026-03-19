@@ -8,6 +8,7 @@ import argparse
 from threading import Event
 import signal
 import glob
+from typing import Optional
 
 from tqdm import tqdm
 import cv2
@@ -19,6 +20,8 @@ from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime
 
 from utils import load_model_from_state_dict
+from models.prior.base import VQLatentPriorModel
+from models.vqvae.vqvae import VQVAE
 
 STOP_SIG = Event()
 
@@ -59,7 +62,7 @@ def parse_args():
         help="Device to run the evaluation on (default: 'cuda')."
     )
     parser.add_argument(
-        '--logit-thres', type=float, required=False, default=0.0,
+        '--logit-thres', type=float, required=False, default=0.9,
         help='Logit threshold to computer anomaly score'
     )
     parser.add_argument(
@@ -79,19 +82,25 @@ def parse_args():
         help='Number of restored images'
     )
     parser.add_argument(
-        '--restore-iters', type=int, default=1,
-        help='Number of compute iterations for restoration'
+        '--pixelwise-as', action='store_true',
+        help='Compute pixel-wise anomaly score'
+    )
+    parser.add_argument(
+        "--kwargs", type=str, nargs='*', default=[],
+        help="Device to run the evaluation on (default: 'cuda')."
     )
 
     if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = parser.parse_args()
 
-    if not os.path.exists(args.data):
-        raise FileNotFoundError(f"Data file {args.data} does not exist.")
-
     if args.rel_thres and not 0 < args.logit_thres < 1:
         raise ValueError('Invalid logit percentile threshold')
+
+    if args.pixelwise_as and args.restore_num < 3:
+        print('Pixel-wise anomaly score requires at least 3 reconstructions.', end=' ')
+        print('Setting restore-num to 3.')
+        args.restore_num = 3
 
     return args
 
@@ -102,15 +111,16 @@ def eval_model(
         evaluate model on the given dataset
     '''
 
-    vae_model, prior_model = None, None
+    vae_model : Optional[VQVAE] = None
+    prior_model : Optional[VQLatentPriorModel] = None
     vae_cfg, prior_cfg = None, None
     if isinstance(args.vae_model, str):
         print(f"Loading VAE model from {args.vae_model}")
         try:
             vae_model, vae_cfg = load_model_from_state_dict(
                 torch.load(args.vae_model, weights_only=False),
-                'vqvae.VQVAE', None
-            )
+                None, None
+            ) # type: ignore
         except FileNotFoundError as e:
             print(f"Error loading VAE model: {e}.")
     if isinstance(args.prior_model, str):
@@ -119,7 +129,7 @@ def eval_model(
             prior_model, prior_cfg = load_model_from_state_dict(
                 torch.load(args.prior_model, weights_only = False),
                 None, None
-            )
+            ) # type: ignore
         except FileNotFoundError as e:
             print(f"Error loading prior model: {e}.")
 
@@ -157,8 +167,20 @@ def eval_model(
         img_files = [args.data]
         label_files = []
     else:
-        img_files = None
-        label_files = args.data
+        try:
+            img_files = [
+                f for f in glob.glob(args.data)
+                if ImageClassificationDataset.is_image_file(f)
+            ]
+        except Exception as ex:
+            print(f'Invalid data: {ex}')
+            return
+
+        if len(img_files) == 0:
+            img_files = None
+            label_files = args.data
+        else:
+            label_files = []
 
     trans_cfg = [
         {
@@ -221,6 +243,7 @@ def eval_model(
 
     STOP_SIG.clear()
     stop_i = 0
+    kwargs = dict(kv.split('=') for kv in args.kwargs)
 
     for i_, batch in enumerate(tqdm(dat_loader)):
         if STOP_SIG.is_set():
@@ -232,7 +255,7 @@ def eval_model(
 
         if vae_model is not None:
             with torch.no_grad():
-                embd_ls, x_hat, perplexity, _ = vae_model(batch_dev)
+                embd_ls, x_hat, perplexity, _, _ = vae_model(batch_dev)
 
             img = dat_set.image_tensor_to_numpy(x_hat[0].cpu())
             orig_img = dat_set.image_tensor_to_numpy(batch[0])
@@ -267,13 +290,13 @@ def eval_model(
             ).item()
             losses['anomaly_score'].append(score)
 
-            if args.restore_num > 0:
+            if args.restore_num > 0 and not args.pixelwise_as:
                 restores = prior_model.restore_by_codes(
                     loss_dict['target'],
                     args.logit_thres,
                     args.restore_num,
                     args.rel_thres,
-                    n_iters = args.restore_iters
+                    **kwargs
                 )
                 for i, res_img in enumerate(restores):
                     img = dat_set.image_tensor_to_numpy(res_img.cpu())
@@ -283,6 +306,21 @@ def eval_model(
                         os.path.join(args.output, img_f + f'_restore_{i}.jpg'),
                         cvt_color(img)
                     )
+            elif args.pixelwise_as:
+                score_map = prior_model.pixelwise_anomaly_score(
+                    batch_dev,
+                    args.logit_thres,
+                    num_reconstructions = args.restore_num,
+                    is_thres_quantile = args.rel_thres,
+                    **kwargs
+                )[0].cpu().numpy()
+                score_img = (score_map * 255).astype(np.uint8).transpose(1, 2, 0)
+                if orig_size is not None:
+                    score_img = cv2.resize(score_img, orig_size)
+                cv2.imwrite(
+                    os.path.join(args.output, img_f + '_score_map.jpg'),
+                    score_img
+                )
         else:
             losses['anomaly_score'].append(None)
 
