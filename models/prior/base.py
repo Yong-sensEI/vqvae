@@ -184,13 +184,13 @@ class VQLatentPriorModel(nn.Module):
         '''
 
     def pixelwise_anomaly_score(
-            self,
-            images : torch.Tensor,
-            logit_threshold : float,
-            num_reconstructions : int = 1,
-            is_thres_quantile : bool = False,
-            **kwargs
-        ) -> torch.Tensor:
+        self,
+        images : torch.Tensor,
+        logit_threshold : float,
+        num_reconstructions : int = 1,
+        is_thres_quantile : bool = False,
+        **kwargs
+    ) -> torch.Tensor:
         ''' compute pixel-wise anomaly score'''
         x_0 = self.feature_extractor_model.reconstruct(images).unsqueeze(1)
         recons = self.restore_images(
@@ -201,5 +201,6 @@ class VQLatentPriorModel(nn.Module):
         weights = F.softmax(
             1.0 / diff.sum(dim=tuple(range(2, diff.dim()))), dim = 1
         )
-        scores = (weights.view(weights.size(0), -1, 1, 1) * diff).sum(dim = 1).clamp(0, 1)
+        scores = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * diff
+            ).sum(dim = 1).clamp(0, 1)
         return scores

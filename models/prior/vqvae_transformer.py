@@ -3,6 +3,7 @@
 '''
 
 from typing import Optional, Tuple
+import random
 
 import numpy as np
 import torch
@@ -89,7 +90,9 @@ class VQLatentTransformer(VQLatentPriorModel):
     def generate_mask(self, x : torch.Tensor):
         ''' generate random mask for training '''
         r_mask = torch.rand(x.shape).to(x.device)
-        mask = r_mask < self._p_mask
+        _p_mask = self._p_mask if isinstance(self._p_mask, float) else \
+            random.uniform(self._p_mask[0], self._p_mask[1])
+        mask = r_mask < _p_mask
         mask.requires_grad = False
         len_mask = mask.sum().item()
         x[mask] = torch.randint(
@@ -106,7 +109,7 @@ class VQLatentTransformer(VQLatentPriorModel):
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
             n_iters : int = 1,
-            resample_option : str = 'all'
+            resample_option : str = 'abnormal'
         ) -> torch.Tensor:
         lead_dim = codes.size(0) * num_reconstructions
         with torch.no_grad():
@@ -173,16 +176,16 @@ class VQLatentTransformer(VQLatentPriorModel):
         if cond is None:
             assert image_chw is not None, 'Require input image shape'
             cond = torch.rand(num_images, *image_chw).to(dev)
-            n_iters = kwargs.get('n_iters', 3)
-            loss_quantile = kwargs.get('loss_quantile', 0.1)
+            n_iters = int(kwargs.pop('n_iters', 3))
+            loss_quantile = float(kwargs.pop('loss_quantile', 0.1))
         else:
             assert isinstance(cond, torch.Tensor)
             if image_chw is not None:
                 assert tuple(cond.shape[-3:]) == tuple(image_chw[::-1]), \
                     'Incompatible conditional shape'
             cond = self._batch_cond(num_images, cond, expected_dim = 4).to(dev)
-            n_iters = kwargs.get('n_iters', 1)
-            loss_quantile = kwargs.get('loss_quantile', 0.75)
+            n_iters = int(kwargs.pop('n_iters', 1))
+            loss_quantile = float(kwargs.pop('loss_quantile', 0.75))
 
         with torch.no_grad():
             codes = self.retrieve_codes(cond, None)
@@ -193,7 +196,7 @@ class VQLatentTransformer(VQLatentPriorModel):
             num_reconstructions = 1,
             is_thres_quantile = True,
             n_iters = n_iters,
-            resample_option = 'all'
+            **kwargs
         )
 
     def mix_sample(self, num_images : int, conds : torch.Tensor, **kwargs):

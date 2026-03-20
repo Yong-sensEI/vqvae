@@ -5,7 +5,6 @@ import threading
 import json
 import signal
 import copy
-import os
 
 from tqdm import tqdm
 import numpy as np
@@ -168,11 +167,13 @@ def train(args):
             if (epoch + 1) % log_interval != 0 and not is_final:
                 continue
 
-            fn = ckpt_cfg.get('keyword', 'pixelsnail') + ('_final' if is_final else '')
-            utils.save_model_and_results(
-                save_path, model, orig_cfg, train_results, val_results, fn
+            fn = utils.save_model_and_results(
+                save_path, model, orig_cfg, train_results, val_results,
+                ckpt_cfg.get('keyword', 'pixelsnail') + (
+                    '_final' if is_final else f'_{epoch + 1}'
+                )
             )
-            print(f"Model saved at epoch {epoch + 1} in {os.path.join(save_path, fn)}")
+            print(f"Model saved at epoch {epoch + 1} in {fn}")
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)

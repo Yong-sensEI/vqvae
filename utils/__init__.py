@@ -81,7 +81,7 @@ def save_model_and_results(
         train_results : Dict,
         val_results : Dict,
         keyword : str = ''
-    ):
+    ) -> str:
     '''
         Save the model state and training results to a file.
     '''
@@ -92,12 +92,11 @@ def save_model_and_results(
         'validation_results': val_results
     }
     os.makedirs(save_path, exist_ok=True)
-    torch.save(
-        results_to_save,
-        os.path.join(
-            save_path, f'{keyword}_' + current_datetime() + '.pth'
-        )
+    fn = os.path.join(
+        save_path, f'{keyword}_' + current_datetime() + '.pth'
     )
+    torch.save(results_to_save, fn)
+    return fn
 
 def load_model_from_state_dict(
         state_dict : Union[Dict, str],
