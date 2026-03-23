@@ -135,7 +135,6 @@ class VQLatentPriorModel(nn.Module):
         logit_threshold : float,
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
-        n_iters : int = 1,
         **kwargs
     ) -> torch.Tensor:
         ''' Restore images'''
@@ -144,7 +143,6 @@ class VQLatentPriorModel(nn.Module):
             codes, logit_threshold,
             num_reconstructions = num_reconstructions,
             is_thres_quantile = is_thres_quantile,
-            n_iters = n_iters,
             **kwargs
         )
 
@@ -202,5 +200,5 @@ class VQLatentPriorModel(nn.Module):
             1.0 / diff.sum(dim=tuple(range(2, diff.dim()))), dim = 1
         )
         scores = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * diff
-            ).sum(dim = 1).clamp(0, 1)
+            ).sum(dim = 1)
         return scores

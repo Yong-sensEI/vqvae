@@ -139,10 +139,10 @@ def eval_model(
 
     if isinstance(vae_cfg, dict):
         colorspace = vae_cfg['train']['data'].get('colorspace', None)
-        norm_opt = vae_cfg['train']['data'].get('normalization', 'default')
+        norm_opt = vae_cfg['train']['data'].get('normalization', None)
     else:
         colorspace = prior_cfg['train']['data'].get('colorspace', None)
-        norm_opt = prior_cfg['train']['data'].get('normalization', 'default')
+        norm_opt = prior_cfg['train']['data'].get('normalization', None)
 
     dev = torch.device(args.device)
     if vae_model is not None:
@@ -264,7 +264,7 @@ def eval_model(
                 orig_img = cv2.resize(orig_img, orig_size)
             if args.save_recon or args.restore_num > 0:
                 cv2.imwrite(
-                    os.path.join(args.output, img_f + '.jpg'),
+                    os.path.join(args.output, img_f + '.png'),
                     cvt_color(img)
                 )
 
@@ -303,7 +303,7 @@ def eval_model(
                     if orig_size is not None:
                         img = cv2.resize(img, orig_size)
                     cv2.imwrite(
-                        os.path.join(args.output, img_f + f'_restore_{i}.jpg'),
+                        os.path.join(args.output, img_f + f'_restore_{i}.png'),
                         cvt_color(img)
                     )
             elif args.pixelwise_as:
@@ -318,7 +318,7 @@ def eval_model(
                 if orig_size is not None:
                     score_img = cv2.resize(score_img, orig_size)
                 cv2.imwrite(
-                    os.path.join(args.output, img_f + '_score_map.jpg'),
+                    os.path.join(args.output, img_f + '_score_map.png'),
                     score_img
                 )
         else:

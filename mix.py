@@ -15,15 +15,16 @@ import shortuuid
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
 
 from utils import load_model_from_state_dict
-from models.prior.base import VQLatentPriorModel
+from models.prior.vqvae_transformer import VQLatentTransformer
 
 def mix_images(
-    model : VQLatentPriorModel,
+    model : VQLatentTransformer,
     normalizer : ImageNormalizer,
     condition_image_files : List[str],
     output_dir : str,
     num_samples : int = 1,
-    device : Optional[torch.device] = None
+    device : Optional[torch.device] = None,
+    **kwargs
 ) -> None:
     ''' mix multiple conditional images to generate new images'''
     if len(condition_image_files) == 0:
@@ -38,14 +39,14 @@ def mix_images(
         [normalizer(img).to(dev) for img in cond_imgs]
     )
 
-    mixture = model.mix_sample(num_samples, conds).cpu()
+    mixture = model.mix_sample(num_samples, conds, **kwargs).cpu()
     imgs = normalizer.tensor_to_image(mixture)
 
     for i, img in enumerate(imgs):
         img = img.resize(orig_size)
         img.save(
             os.path.join(output_dir,
-            f'{shortuuid.random(8)}_{i}.jpg')
+            f'{shortuuid.random(8)}_{i}.png')
         )
 
 def main():
@@ -71,13 +72,17 @@ def main():
         "--device", default = 'cuda',
         help = "Device to run the evaluation on (default: 'cuda')."
     )
+    parser.add_argument(
+        "--kwargs", type=str, nargs='*', default=[],
+        help="Device to run the evaluation on (default: 'cuda')."
+    )
 
     if len(sys.argv) == 1:
         sys.argv.append("-h")
     args = parser.parse_args()
 
     model, cfg = load_model_from_state_dict(args.model, None)
-    assert isinstance(model, VQLatentPriorModel), 'Invalid model file'
+    assert isinstance(model, VQLatentTransformer), 'Invalid model file'
     normalizer : ImageNormalizer = ImageNormalizer(
         cfg['train']['data'].get('transforms', []),
         cfg['train']['data'].get('normalization', None),
@@ -98,13 +103,15 @@ def main():
                 f for f in glob(img) if ImageTaskDataset.is_image_file(f)
             ])
 
+    kwargs = dict(kv.split('=') for kv in args.kwargs)
     mix_images(
         model,
         normalizer,
         img_files,
         args.output_dir,
         args.num_samples,
-        torch.device(args.device)
+        torch.device(args.device),
+        **kwargs
     )
 
 if __name__ == '__main__':

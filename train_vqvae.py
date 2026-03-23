@@ -168,7 +168,7 @@ def train(args):
         is_final = epoch + 1 == train_cfg['epochs']
         if 'checkpoint' in train_cfg:
             ckpt_cfg = train_cfg['checkpoint']
-            if (epoch + 1) % log_interval != 0 and not is_final:
+            if (log_interval <= 0 or (epoch + 1) % log_interval != 0) and not is_final:
                 continue
 
             fn = utils.save_model_and_results(

@@ -29,6 +29,18 @@ def get_datasets(data_cfg : Dict):
         normalization_option = data_cfg.get('normalization', None),
         colorspace=data_cfg.get('colorspace', None)
     )
+    if not (
+        train_data.normalization_option is None or
+        isinstance(train_data.normalization_option, str) and
+        train_data.normalization_option.lower() == 'none'
+    ):
+        raise ValueError(
+            'Normalization option for training dataset must be none'
+        )
+    if train_data.normalization_option != val_data.normalization_option:
+        raise ValueError(
+            'Normalization options for training and validation datasets must be the same.'
+        )
     return train_data, val_data
 
 def get_data_variance(

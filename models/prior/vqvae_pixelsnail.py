@@ -73,7 +73,6 @@ class VQLatentSNAIL(VQLatentPriorModel):
             logit_threshold : float,
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
-            n_iters : int = 1,
             **kwargs
         ) -> torch.Tensor:
         code_size = codes.shape[-2:]

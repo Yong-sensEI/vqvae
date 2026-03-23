@@ -65,8 +65,6 @@ def get_loss(
         colorspace = colorspace
     )
     print(f'{dat_set.total_num_samples} images found for evaluation.')
-    if max_img_num is None:
-        max_img_num = dat_set.total_num_samples
 
     dat_loader : DataLoader = DataLoader(
         dat_set,
@@ -74,11 +72,16 @@ def get_loss(
         shuffle = False
     )
 
+    if max_img_num is None:
+        load_files = dat_loader
+    else:
+        load_files = [f for _, f in zip(range(max_img_num), dat_loader)]
+
     losses = []
     STOP_SIG.clear()
 
-    for i_, batch in enumerate(tqdm(dat_loader)):
-        if STOP_SIG.is_set() or i_ > max_img_num:
+    for batch in tqdm(load_files):
+        if STOP_SIG.is_set():
             break
 
         batch_dev = batch.to(next(model.parameters()).device)

@@ -1,0 +1,4 @@
+1. EMA and other ways to prevent code collapse for VQ-VAE
+2. Better Mix algorithm
+3. Use codes for classification?
+4. Use GAN for image synthesis

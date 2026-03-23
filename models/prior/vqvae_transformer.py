@@ -219,8 +219,10 @@ class VQLatentTransformer(VQLatentPriorModel):
 
         return self._restore_abnormal(
             mix_codes,
-            logit_threshold = kwargs.get('loss_quantile', 0.8),
+            logit_threshold = float(kwargs.pop('loss_quantile', 0.9)),
             num_reconstructions = 1,
             is_thres_quantile = True,
-            n_iters = kwargs.get('n_iters', 3)
+            n_iters = int(kwargs.pop('n_iters', 1)),
+            resample_option = kwargs.pop('resample_option', 'abnormal'),
+            **kwargs
         )

@@ -113,7 +113,8 @@ class FiniteScalarQuantizer(Quantizer):
     def __init__(
             self,
             levels : Sequence[int],
-            embedding_dim : Optional[int] = None
+            embedding_dim : Optional[int] = None,
+            bound_function : str = 'ifsq'
         ):
         super().__init__()
 
@@ -159,6 +160,13 @@ class FiniteScalarQuantizer(Quantizer):
             self.indices_to_codes(torch.arange(0, self.n_embeddings)),
             persistent = False
         )
+
+        if bound_function.lower() == 'tanh':
+            self._bound_func = torch.tanh
+        elif bound_function.lower() == 'ifsq':
+            self._bound_func = lambda x: 2.0 * torch.sigmoid(1.6 * x) - 1
+        else:
+            raise ValueError(f"Invalid bound function: {bound_function}")
 
         self._device = self._levels.device
 
@@ -206,7 +214,7 @@ class FiniteScalarQuantizer(Quantizer):
 
     def bound(self, z: torch.Tensor) -> torch.Tensor:
         """Bound `z`, an array of shape (..., d)."""
-        return torch.tanh(z + self._shift) * self._half_l - self._offset # type: ignore
+        return self._bound_func(z + self._shift) * self._half_l - self._offset
 
     def quantize(self, z: torch.Tensor) -> torch.Tensor:
         """Quanitzes z, returns quantized zhat, same shape as z."""

@@ -45,7 +45,8 @@ class FSQVAE(QuantVAE):
             levels,
             embedding_dim,
             num_patches : Union[int, Tuple[int, int]] = 1,
-            patch_prob : float = 0
+            patch_prob : float = 0,
+            **kwargs
         ):
         super().__init__(
             num_hidden,
@@ -56,4 +57,4 @@ class FSQVAE(QuantVAE):
             patch_prob = patch_prob
         )
         # pass continuous latent vector through discretization bottleneck
-        self.vector_quantization = FiniteScalarQuantizer(levels, embedding_dim)
+        self.vector_quantization = FiniteScalarQuantizer(levels, embedding_dim, **kwargs)

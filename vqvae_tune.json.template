@@ -43,7 +43,7 @@
                     ]
                 }
             ],
-            "normalization": "default",
+            "normalization": null,
             "colorspace": "RGB"
         },
         "epochs": 100,
