@@ -1,7 +1,7 @@
 '''
     Utility functions for data loading, timestamp generation, and model saving.
 '''
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union, List
 import os
 import random
 
@@ -149,3 +149,21 @@ def load_model_from_state_dict(
     model.load_state_dict(state_dict['model'], strict=True)
 
     return model, config
+
+def try_parse_number(string : str):
+    ''' try to parse a string as a number, int or float '''
+    try:
+        val = float(string)
+    except ValueError:
+        return string
+    int_val = int(val)
+    if val - int_val == 0:
+        return int_val
+    return val
+
+def parse_kwargs(kwargs : List[str]) -> Dict:
+    ''' argparse kwargs '''
+    return {
+        k : try_parse_number(v)
+        for k, v in dict(kv.split('=') for kv in kwargs).items()
+    }

@@ -1,11 +1,13 @@
 {
     "model": {
+        "type": "models.vqvae.FSQVAE",
+        "in_channel": 1,
         "num_hidden": 256,
         "num_residual_hidden": 256,
-        "residual_layers": 3,
-        "num_embeddings": 128,
-        "embedding_dim": 64,
-        "commitment_cost": 0.25
+        "residual_layers": 4,
+        "embedding_dim": 16,
+        "levels": [4, 2, 2],
+        "bound_function": "ifsq"
     },
     "train": {
         "data": {
@@ -23,9 +25,13 @@
                 {
                     "type": "torchvision.transforms.v2.Resize",
                     "args": [
-                        [128, 128]
+                        [256, 256]
                     ]
                 },
+                {
+                    "type": "torchvision.transforms.v2.RandomAdjustSharpness",
+                    "args": [2.0, 0.5]
+                },                
                 {
                     "type": "torchvision.transforms.v2.RandomHorizontalFlip"
                 },
@@ -38,9 +44,9 @@
                         "brightness": 0.2, 
                         "contrast": 0.5,
                         "saturation": 0.2, 
-                        "hue": 0.3
+                        "hue": 0.0
                     }
-                },
+                },             
                 {
                     "type": "torchvision.transforms.v2.RandomRotation",
                     "args": [

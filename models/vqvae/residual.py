@@ -49,17 +49,3 @@ class ResidualStack(nn.Module):
             x = layer(x)
         x = F.relu(x)
         return x
-
-
-if __name__ == "__main__":
-    # random data
-    x = np.random.random_sample((3, 40, 40, 200))
-    x = torch.tensor(x).float()
-    # test Residual Layer
-    res = ResidualLayer(40, 40, 20)
-    res_out = res(x)
-    print('Res Layer out shape:', res_out.shape)
-    # test res stack
-    res_stack = ResidualStack(40, 40, 20, 3)
-    res_stack_out = res_stack(x)
-    print('Res Stack out shape:', res_stack_out.shape)

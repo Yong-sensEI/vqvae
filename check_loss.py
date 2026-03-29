@@ -144,10 +144,12 @@ def main():
     print(f"Mean: {np.mean(losses):.4f}")
     print(f"Min: {np.min(losses):.4f}")
     print(f"10% percentile: {np.percentile(losses, 10):.4f}")
-    print(f"30% percentile: {np.percentile(losses, 30):.4f}")
+    print(f"25% percentile: {np.percentile(losses, 25):.4f}")
     print(f"Median: {np.median(losses):.4f}")
-    print(f"70% percentile: {np.percentile(losses, 70):.4f}")
+    print(f"75% percentile: {np.percentile(losses, 75):.4f}")
     print(f"90% percentile: {np.percentile(losses, 90):.4f}")
+    print(f"95% percentile: {np.percentile(losses, 95):.4f}")
+    print(f"99% percentile: {np.percentile(losses, 99):.4f}")
     print(f"Max: {np.max(losses):.4f}")
 
 if __name__ == "__main__":

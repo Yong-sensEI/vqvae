@@ -16,7 +16,7 @@ import torch
 
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
 
-from utils import load_model_from_state_dict
+from utils import load_model_from_state_dict, parse_kwargs
 from models.prior.base import VQLatentPriorModel
 
 STOP_SIG = threading.Event()
@@ -57,7 +57,7 @@ def gen_images(
     if cond is not None:
         cond.to(dev)
 
-    img_tensors = model.sample(num_samples, cond, image_chw, **kwargs).detach().cpu()
+    img_tensors = model.sample(num_samples, cond, image_chw, **kwargs).detach().cpu()[0]
     imgs = normalizer.tensor_to_image(img_tensors)
 
     if isinstance(imgs, Image.Image):
@@ -145,7 +145,7 @@ def main():
     )
 
     signal.signal(signal.SIGINT, signal_handler)
-    kwargs = dict(kv.split('=') for kv in args.kwargs)
+    kwargs = parse_kwargs(args.kwargs)
     for img_f in tqdm(img_files):
         if STOP_SIG.is_set():
             break

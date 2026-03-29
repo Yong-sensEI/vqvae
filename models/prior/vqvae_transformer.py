@@ -109,13 +109,15 @@ class VQLatentTransformer(VQLatentPriorModel):
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
             n_iters : int = 1,
-            resample_option : str = 'abnormal'
-        ) -> torch.Tensor:
+            **kwargs
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
+        resample_option = kwargs.pop('resample_option', 'abnormal')
         lead_dim = codes.size(0) * num_reconstructions
         with torch.no_grad():
-            flat_codes = codes.view(codes.size(0), -1).unsqueeze(1).repeat(
+            orig_flat_codes = codes.view(codes.size(0), -1).unsqueeze(1).repeat(
                 1, num_reconstructions, 1
             ).reshape(lead_dim, -1)
+            flat_codes = orig_flat_codes.clone()
 
             for _ in range(n_iters):
                 inp = self.to_onehot(flat_codes)
@@ -158,12 +160,21 @@ class VQLatentTransformer(VQLatentPriorModel):
             z = self.feature_extractor_model.vector_quantization.embed(
                 flat_codes.view(lead_dim, *codes.shape[1:])
             )
-            img_recon = torch.cat([
+            img_recon = torch.stack([
                 self.feature_extractor_model.decoder(
                     z[i * num_reconstructions : (i+1) * num_reconstructions]
                 ) for i in range(codes.size(0))
             ])
-        return img_recon
+
+            outp = self.prior_model.forward(self.to_onehot(flat_codes), mask = None)
+            losses = F.cross_entropy(
+                outp.transpose(-1, 1),
+                self.to_onehot(orig_flat_codes).transpose(-1, 1),
+                reduction = 'none',
+                **kwargs
+            ).mean(dim = -1).view(codes.size(0), num_reconstructions)
+
+        return img_recon, losses
 
     def sample(
             self,
@@ -176,16 +187,16 @@ class VQLatentTransformer(VQLatentPriorModel):
         if cond is None:
             assert image_chw is not None, 'Require input image shape'
             cond = torch.rand(num_images, *image_chw).to(dev)
-            n_iters = int(kwargs.pop('n_iters', 3))
-            loss_quantile = float(kwargs.pop('loss_quantile', 0.1))
+            n_iters = kwargs.pop('n_iters', 3)
+            loss_quantile = kwargs.pop('loss_quantile', 0.1)
         else:
             assert isinstance(cond, torch.Tensor)
             if image_chw is not None:
                 assert tuple(cond.shape[-3:]) == tuple(image_chw[::-1]), \
                     'Incompatible conditional shape'
             cond = self._batch_cond(num_images, cond, expected_dim = 4).to(dev)
-            n_iters = int(kwargs.pop('n_iters', 1))
-            loss_quantile = float(kwargs.pop('loss_quantile', 0.75))
+            n_iters = kwargs.pop('n_iters', 1)
+            loss_quantile = kwargs.pop('loss_quantile', 0.75)
 
         with torch.no_grad():
             codes = self.retrieve_codes(cond, None)
@@ -197,7 +208,7 @@ class VQLatentTransformer(VQLatentPriorModel):
             is_thres_quantile = True,
             n_iters = n_iters,
             **kwargs
-        )
+        )[0]
 
     def mix_sample(self, num_images : int, conds : torch.Tensor, **kwargs):
         ''' 
@@ -219,10 +230,10 @@ class VQLatentTransformer(VQLatentPriorModel):
 
         return self._restore_abnormal(
             mix_codes,
-            logit_threshold = float(kwargs.pop('loss_quantile', 0.9)),
+            logit_threshold = kwargs.pop('loss_quantile', 0.9),
             num_reconstructions = 1,
             is_thres_quantile = True,
             n_iters = int(kwargs.pop('n_iters', 1)),
             resample_option = kwargs.pop('resample_option', 'abnormal'),
             **kwargs
-        )
+        )[0]

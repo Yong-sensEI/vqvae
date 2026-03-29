@@ -29,9 +29,13 @@
                 {
                     "type": "torchvision.transforms.v2.Resize",
                     "args": [
-                        [128, 128]
+                        [256, 256]
                     ]
                 },
+                {
+                    "type": "torchvision.transforms.v2.RandomAdjustSharpness",
+                    "args": [2.0, 0.5]
+                },                
                 {
                     "type": "torchvision.transforms.v2.RandomHorizontalFlip"
                 },
@@ -44,22 +48,15 @@
                         "brightness": 0.2, 
                         "contrast": 0.5,
                         "saturation": 0.2, 
-                        "hue": 0.3
+                        "hue": 0.0
                     }
                 },             
                 {
                     "type": "torchvision.transforms.v2.RandomRotation",
                     "args": [
-                        [-10, 10]
+                        [-3, 3]
                     ]
-                },
-                {
-                    "type": "torchvision.transforms.v2.RandomAffine",
-                    "kwargs": {
-                        "degrees": 5,
-                        "scale": [0.95, 1.05]
-                    }
-                }                
+                }               
             ],
             "normalization": null,
             "colorspace": "RGB"

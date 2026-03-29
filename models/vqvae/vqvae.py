@@ -13,22 +13,22 @@ class VQVAE(QuantVAE):
     '''
     def __init__(
             self,
+            in_channel,
             num_hidden,
             num_residual_hidden,
             residual_layers,
             num_embeddings,
             embedding_dim,
             commitment_cost,
-            num_patches : Union[int, Tuple[int, int]] = 1,
-            patch_prob : float = 0
+            downsize_steps
         ):
         super().__init__(
+            in_channel,
             num_hidden,
             num_residual_hidden,
             embedding_dim,
             residual_layers,
-            num_patches = num_patches,
-            patch_prob = patch_prob
+            downsize_steps = downsize_steps
         )
         # pass continuous latent vector through discretization bottleneck
         self.vector_quantization = VectorQuantizer(
@@ -39,22 +39,22 @@ class FSQVAE(QuantVAE):
     ''' Finite Scalar Quntizer VAE '''
     def __init__(
             self,
+            in_channel,
             num_hidden,
             num_residual_hidden,
             residual_layers,
             levels,
             embedding_dim,
-            num_patches : Union[int, Tuple[int, int]] = 1,
-            patch_prob : float = 0,
+            downsize_steps,
             **kwargs
         ):
         super().__init__(
+            in_channel,
             num_hidden,
             num_residual_hidden,
             embedding_dim,
             residual_layers,
-            num_patches = num_patches,
-            patch_prob = patch_prob
+            downsize_steps = downsize_steps
         )
         # pass continuous latent vector through discretization bottleneck
         self.vector_quantization = FiniteScalarQuantizer(levels, embedding_dim, **kwargs)

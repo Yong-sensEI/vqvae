@@ -1,7 +1,7 @@
 '''
     Base quantized VAE model
 '''
-from typing import Optional, Tuple, Union
+from typing import Optional
 from abc import abstractmethod
 
 import torch
@@ -9,7 +9,6 @@ from torch import nn
 
 from .encoder import Encoder
 from .decoder import Decoder
-from .. import mask_by_patches
 
 class Quantizer(nn.Module):
     '''Quantizer module'''
@@ -55,12 +54,12 @@ class QuantVAE(nn.Module):
     '''
     def __init__(
             self,
+            in_channel,
             num_hidden,
             num_residual_hidden,
             embedding_dim,
             residual_layers,
-            num_patches : Union[int, Tuple[int, int]] = 1,
-            patch_prob : float = 0,
+            downsize_steps : int = 2,
             **kwargs
         ):
         super().__init__()
@@ -69,17 +68,19 @@ class QuantVAE(nn.Module):
         self.n_res_layers = residual_layers
 
         # encode image into continuous latent space
-        self.encoder = Encoder(3, num_hidden, residual_layers, num_residual_hidden)
+        self.encoder = Encoder(
+            in_channel, num_hidden, residual_layers, num_residual_hidden, downsize_steps
+        )
         self.pre_quantization_conv = nn.Conv2d(
             num_hidden, embedding_dim, kernel_size=1, stride=1
         )
 
         self.vector_quantization : Optional[Quantizer] = None
         # decode the discrete latent representation
-        self.decoder = Decoder(embedding_dim, num_hidden, residual_layers, num_residual_hidden)
-        self._n_patches : Tuple[int, int] = num_patches if isinstance(num_patches, (tuple, list)) \
-            else (num_patches, num_patches)
-        self._patch_prob = patch_prob
+        self.decoder = Decoder(
+            embedding_dim, num_hidden, residual_layers,
+            num_residual_hidden, in_channel, downsize_steps
+        )
 
     def to(self, device, *args, **kwargs):
         '''Override to() to ensure vector_quantization to use correct device'''
@@ -99,27 +100,6 @@ class QuantVAE(nn.Module):
         '''number of discrete latent codes'''
         return self.code_size
 
-    @property
-    def num_hidden(self) -> int:
-        '''number of channels of the last hidden layer'''
-        return self.h_dim
-
-    @property
-    def num_residual_hidden(self) -> int:
-        '''the hidden dimension of the residual blocks'''
-        return self.res_h_dim
-
-    @property
-    def residual_layers(self) -> int:
-        '''number of residual layers'''
-        return self.n_res_layers
-
-    @property
-    def embedding_dim(self) -> int:
-        '''dimension of the embedding vectors'''
-        assert self.vector_quantization is not None, 'vector_quantization module is not set'
-        return self.vector_quantization.embedding_dim
-
     def encode(self, x, cond = None):
         '''Encode input images to latent codes'''
         z_e = self.encoder(x)
@@ -133,7 +113,7 @@ class QuantVAE(nn.Module):
     def forward(self, x, cond = None):
         '''Forward pass through VQ-VAE'''
         assert self.vector_quantization is not None, 'vector_quantization module is not set'
-        z_e = self.encoder(self._mask_by_patches(x))
+        z_e = self.encoder(x)
         z_e = self.pre_quantization_conv(z_e)
         loss, z_q, perplexity, encodings, indices = self.vector_quantization(z_e)
         x_hat = self.decoder(z_q)
@@ -150,7 +130,3 @@ class QuantVAE(nn.Module):
         '''Reconstruct input images'''
         _, x_hat, _, _, _ = self.forward(x)
         return x_hat
-
-    def _mask_by_patches(self, x):
-        '''Mask input images by patches'''
-        return mask_by_patches(x, self._n_patches, self._patch_prob)

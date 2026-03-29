@@ -1,7 +1,7 @@
+''' CNN based encoder '''
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 import numpy as np
 from .residual import ResidualStack
 
@@ -21,34 +21,40 @@ class Encoder(nn.Module):
 
     """
 
-    def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim):
+    def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim, downsize_steps = 2):
         super().__init__()
         kernel = 4
         stride = 2
+        downsize_layers = []
+        for i in range(downsize_steps):
+            if i == 0:
+                downsize_layers.append(
+                    nn.Conv2d(
+                        in_dim, h_dim // 2, kernel_size=kernel,
+                        stride=stride, padding=1
+                    )
+                )
+            elif i == downsize_steps - 1:
+                downsize_layers.append(
+                    nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel,
+                        stride=stride, padding=1
+                    )
+                )
+            else:
+                downsize_layers.append(
+                    nn.Conv2d(h_dim // 2, h_dim // 2, kernel_size=kernel,
+                        stride=stride, padding=1
+                    )
+                )
+            downsize_layers.append(nn.GELU())
+
         self.conv_stack = nn.Sequential(
-            nn.Conv2d(in_dim, h_dim // 2, kernel_size=kernel,
-                      stride=stride, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(h_dim // 2, h_dim, kernel_size=kernel,
-                      stride=stride, padding=1),
-            nn.ReLU(),
+            *downsize_layers,
             nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1,
                       stride=stride-1, padding=1),
             ResidualStack(
                 h_dim, h_dim, res_h_dim, n_res_layers)
-
         )
 
     def forward(self, x):
         return self.conv_stack(x)
-
-
-if __name__ == "__main__":
-    # random data
-    x = np.random.random_sample((3, 40, 40, 200))
-    x = torch.tensor(x).float()
-
-    # test encoder
-    encoder = Encoder(40, 128, 3, 64)
-    encoder_out = encoder(x)
-    print('Encoder out shape:', encoder_out.shape)

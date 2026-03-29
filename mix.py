@@ -14,7 +14,7 @@ import shortuuid
 
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
 
-from utils import load_model_from_state_dict
+from utils import load_model_from_state_dict, parse_kwargs
 from models.prior.vqvae_transformer import VQLatentTransformer
 
 def mix_images(
@@ -39,7 +39,7 @@ def mix_images(
         [normalizer(img).to(dev) for img in cond_imgs]
     )
 
-    mixture = model.mix_sample(num_samples, conds, **kwargs).cpu()
+    mixture = model.mix_sample(num_samples, conds, **kwargs).cpu()[0]
     imgs = normalizer.tensor_to_image(mixture)
 
     for i, img in enumerate(imgs):
@@ -103,7 +103,7 @@ def main():
                 f for f in glob(img) if ImageTaskDataset.is_image_file(f)
             ])
 
-    kwargs = dict(kv.split('=') for kv in args.kwargs)
+    kwargs = parse_kwargs(args.kwargs)
     mix_images(
         model,
         normalizer,

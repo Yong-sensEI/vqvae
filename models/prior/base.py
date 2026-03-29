@@ -106,9 +106,10 @@ class VQLatentPriorModel(nn.Module):
             is_thres_quantile : bool = False,
             n_iters : int = 1,
             **kwargs
-        ) -> torch.Tensor:
+        ) -> Tuple[torch.Tensor, torch.Tensor]:
         '''
             Restore from codes by removing unlikely codes
+            return reconstructed images and the losses related to the orginal images
         '''
 
     def restore_by_codes(
@@ -119,7 +120,7 @@ class VQLatentPriorModel(nn.Module):
         is_thres_quantile : bool = False,
         n_iters : int = 1,
         **kwargs
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         ''' Restore by embedding codes'''
         return self._restore_abnormal(
             codes, logit_threshold,
@@ -136,7 +137,7 @@ class VQLatentPriorModel(nn.Module):
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
         **kwargs
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         ''' Restore images'''
         codes = self.retrieve_codes(images, None)
         return self._restore_abnormal(
@@ -188,17 +189,23 @@ class VQLatentPriorModel(nn.Module):
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
         **kwargs
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         ''' compute pixel-wise anomaly score'''
-        x_0 = self.feature_extractor_model.reconstruct(images).unsqueeze(1)
-        recons = self.restore_images(
+        x_0 = self.feature_extractor_model.reconstruct(images)
+        #base_kwargs = kwargs.copy()
+        #base_kwargs['resample_option'] = 'normal'
+        #recons, losses = self.restore_images(
+        #    images, logit_threshold, num_reconstructions,
+        #    is_thres_quantile = is_thres_quantile, **base_kwargs
+        #)
+        #x_0 = recons.mean(dim = 1)
+
+        recons, losses = self.restore_images(
             images, logit_threshold, num_reconstructions,
             is_thres_quantile = is_thres_quantile, **kwargs
-        ).view(images.size(0), num_reconstructions, *images.shape[1:])
-        diff = torch.abs(x_0 - recons)
-        weights = F.softmax(
-            1.0 / diff.sum(dim=tuple(range(2, diff.dim()))), dim = 1
         )
-        scores = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * diff
+        #diff = torch.abs(x_0 - recons) / torch.max(x_0, recons).clamp(min=1e-8)
+        weights = losses / losses.sum()
+        recon = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * recons
             ).sum(dim = 1)
-        return scores
+        return torch.abs(x_0 - recon), recon

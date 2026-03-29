@@ -19,7 +19,7 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime
 
-from utils import load_model_from_state_dict
+from utils import load_model_from_state_dict, parse_kwargs
 from models.prior.base import VQLatentPriorModel
 from models.vqvae.vqvae import VQVAE
 
@@ -89,6 +89,10 @@ def parse_args():
         "--kwargs", type=str, nargs='*', default=[],
         help="Device to run the evaluation on (default: 'cuda')."
     )
+    parser.add_argument(
+        '--colormap', type=str, default='gray',
+        help='Colormap to visualize anomaly score maps.'
+    )
 
     if len(sys.argv) == 1:
         sys.argv.append("-h")
@@ -101,6 +105,11 @@ def parse_args():
         print('Pixel-wise anomaly score requires at least 3 reconstructions.', end=' ')
         print('Setting restore-num to 3.')
         args.restore_num = 3
+
+    if args.colormap.lower() != 'gray':
+        args.colormap = getattr(cv2, f'COLORMAP_{args.colormap.upper()}')
+    else:
+        args.colormap = None
 
     return args
 
@@ -243,8 +252,9 @@ def eval_model(
 
     STOP_SIG.clear()
     stop_i = 0
-    kwargs = dict(kv.split('=') for kv in args.kwargs)
+    kwargs = parse_kwargs(args.kwargs)
 
+    score_imgs = {}
     for i_, batch in enumerate(tqdm(dat_loader)):
         if STOP_SIG.is_set():
             break
@@ -297,7 +307,7 @@ def eval_model(
                     args.restore_num,
                     args.rel_thres,
                     **kwargs
-                )
+                )[0][0]
                 for i, res_img in enumerate(restores):
                     img = dat_set.image_tensor_to_numpy(res_img.cpu())
                     if orig_size is not None:
@@ -307,24 +317,37 @@ def eval_model(
                         cvt_color(img)
                     )
             elif args.pixelwise_as:
-                score_map = prior_model.pixelwise_anomaly_score(
+                score_map, recon = prior_model.pixelwise_anomaly_score(
                     batch_dev,
                     args.logit_thres,
                     num_reconstructions = args.restore_num,
                     is_thres_quantile = args.rel_thres,
                     **kwargs
-                )[0].cpu().numpy()
-                score_img = (score_map * 255).astype(np.uint8).transpose(1, 2, 0)
+                )
+                score_img = (score_map[0].cpu().numpy() * 255).astype(
+                    np.uint8).transpose(1, 2, 0)
+                recon_img = dat_set.image_tensor_to_numpy(recon[0].cpu())
                 if orig_size is not None:
                     score_img = cv2.resize(score_img, orig_size)
-                cv2.imwrite(
-                    os.path.join(args.output, img_f + '_score_map.png'),
-                    score_img
-                )
+                    recon_img = cv2.resize(recon_img, orig_size)
+                sav_fn = os.path.join(args.output, img_f + '_score.png')
+                score_imgs[sav_fn] = score_img
+                sav_fn = os.path.join(args.output, img_f + '_recon.png')
+                cv2.imwrite(sav_fn, cvt_color(recon_img))
         else:
             losses['anomaly_score'].append(None)
 
         stop_i = i_
+
+    if len(score_imgs) > 0:
+        i_min = np.min([np.min(m) for m in score_imgs.values()])
+        i_max = np.max([np.max(m) for m in score_imgs.values()])
+        for fn, score_img in tqdm(score_imgs.items(), desc="Saving score maps"):
+            score_img = ((score_img.astype(float) - i_min) / (i_max - i_min) * 255
+                ).astype(np.uint8)
+            if args.colormap is not None:
+                score_img = cv2.applyColorMap(score_img, args.colormap)
+            cv2.imwrite(fn, score_img)
 
     with open(os.path.join(
             args.output,
