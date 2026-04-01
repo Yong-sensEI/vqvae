@@ -1,8 +1,6 @@
 ''' CNN based encoder '''
 
-import torch
 from torch import nn
-import numpy as np
 from .residual import ResidualStack
 
 

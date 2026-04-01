@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime, import_object
 
-from models.prior import VQLatentSNAIL, VQLatentTransformer
+from models.prior.base import AbstractVQLatentPriorModel
 
 def get_datasets(data_cfg : Dict):
     '''
@@ -130,7 +130,7 @@ def load_model_from_state_dict(
     else:
         model_type = import_object(model_cfg.pop('type'))
 
-    if model_type in (VQLatentSNAIL, VQLatentTransformer):
+    if issubclass(model_type, AbstractVQLatentPriorModel):
         encoder_cfg = config['encoder']
         encoder_wgts = torch.load(
             encoder_cfg['checkpoint'],

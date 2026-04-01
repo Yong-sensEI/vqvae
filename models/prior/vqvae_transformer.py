@@ -3,21 +3,23 @@
 '''
 
 from typing import Optional, Tuple
-import random
 
-import numpy as np
 import torch
 from torch.nn import functional as F
 
 from .base import VQLatentPriorModel
 from .transformer import PriorTransformer
-from ..vqvae import VQVAE
+from ..vqvae import QuantVAE
+from .transfomer_utils import (
+    to_onehot, transformer_loss, resample_codes, reconstruct_by_codes,
+    create_sample_cond
+)
 
 class VQLatentTransformer(VQLatentPriorModel):
     '''
-        Transformer model leanring prior in the latent space of a VQ-VAE
+        Transformer model learning prior in the latent space of a VQ-VAE
     '''
-    def __init__(self, feature_extractor_model : VQVAE, **kwargs):
+    def __init__(self, feature_extractor_model : QuantVAE, **kwargs):
         self._p_mask = kwargs.pop('mask_prob', 0.1)
         self._beta = kwargs.pop('beta', 0.01)
         self._use_tamper_mask = kwargs.pop('mask_tamper', True)
@@ -29,10 +31,10 @@ class VQLatentTransformer(VQLatentPriorModel):
 
     def to_onehot(self, codes : torch.Tensor) -> torch.Tensor:
         ''' convert codes to one-hot tensors '''
-        return F.one_hot( # pylint: disable=not-callable
+        return to_onehot(
             codes,
-            num_classes = self.feature_extractor_model.code_size
-        ).float()
+            code_size = self.feature_extractor_model.code_size
+        )
 
     def loss(
             self,
@@ -48,59 +50,12 @@ class VQLatentTransformer(VQLatentPriorModel):
         with torch.no_grad():
             codes = self.retrieve_codes(x, None)
 
-        flat_codes = codes.view(x.size(0), -1)
-        inp = self.to_onehot(flat_codes)
-
-        if is_training:
-            with torch.no_grad():
-                flat_clone = flat_codes.clone()
-                flat_clone, mask = self.generate_mask(flat_clone)
-
-            inp_tampered = self.to_onehot(flat_clone)
-            outp = self.prior_model.forward(
-                inp_tampered,
-                mask if self._use_tamper_mask else None
-            )
-            loss_t = F.cross_entropy(
-                outp[mask], inp[mask], reduction = 'sum', **kwargs
-            ) * (1 - self._beta) + F.cross_entropy(
-                outp[~mask], inp[~mask], reduction = 'sum', **kwargs
-            ) * self._beta
-            if reduction == 'mean':
-                loss_t /= np.prod(codes.shape)
-        else:
-            with torch.no_grad():
-                outp = self.prior_model.forward(inp, mask = None)
-                loss_t = F.cross_entropy(
-                    outp.transpose(-1, 1),
-                    inp.transpose(-1, 1),
-                    reduction = reduction,
-                    **kwargs
-                )
-
-        logits = outp.view(*codes.shape, -1)
-
-        return {
-            'loss': loss_t,
-            'logits': logits,
-            'pred': torch.argmax(logits, dim = -1),
-            'target': codes
-        }
-
-    def generate_mask(self, x : torch.Tensor):
-        ''' generate random mask for training '''
-        r_mask = torch.rand(x.shape).to(x.device)
-        _p_mask = self._p_mask if isinstance(self._p_mask, float) else \
-            random.uniform(self._p_mask[0], self._p_mask[1])
-        mask = r_mask < _p_mask
-        mask.requires_grad = False
-        len_mask = mask.sum().item()
-        x[mask] = torch.randint(
-            low = 0,
-            high = self.feature_extractor_model.code_size,
-            size = (len_mask,)
-        ).to(x.device)
-        return x, mask
+        return transformer_loss(
+            self.prior_model, codes, # type: ignore
+            self._p_mask, self._beta, self._use_tamper_mask,
+            reduction, is_training,
+            **kwargs
+        )
 
     def _restore_abnormal(
             self,
@@ -112,69 +67,23 @@ class VQLatentTransformer(VQLatentPriorModel):
             **kwargs
         ) -> Tuple[torch.Tensor, torch.Tensor]:
         resample_option = kwargs.pop('resample_option', 'abnormal')
-        lead_dim = codes.size(0) * num_reconstructions
-        with torch.no_grad():
-            orig_flat_codes = codes.view(codes.size(0), -1).unsqueeze(1).repeat(
-                1, num_reconstructions, 1
-            ).reshape(lead_dim, -1)
-            flat_codes = orig_flat_codes.clone()
+        flat_codes, orig_flat_codes = resample_codes(
+            self.prior_model, codes, # type: ignore
+            logit_threshold,
+            num_reconstructions,
+            is_thres_quantile,
+            n_iters,
+            self._use_tamper_mask,
+            resample_option
+        )
 
-            for _ in range(n_iters):
-                inp = self.to_onehot(flat_codes)
-                outp = self.prior_model.forward(
-                    inp, None
-                )
-                loss = F.cross_entropy(
-                    outp.transpose(-1, 1),
-                    inp.transpose(-1, 1),
-                    reduction = 'none'
-                )
-                _threshold = torch.quantile(loss, logit_threshold) \
-                    if is_thres_quantile else logit_threshold
-                err_mask = loss > _threshold
-                if torch.any(err_mask):
-                    probs = F.softmax(
-                        self.prior_model.forward(inp, err_mask)
-                            if self._use_tamper_mask else outp,
-                        dim = -1
-                    )
-                    if resample_option == 'all':
-                        flat_codes[:] = torch.multinomial(
-                            probs.view(
-                                -1, self.feature_extractor_model.code_size
-                            ), 1
-                        ).view(lead_dim, -1)
-                    elif resample_option == 'abnormal':
-                        flat_codes[err_mask] = torch.multinomial(
-                            probs[err_mask], 1
-                        ).squeeze(-1)
-                    elif resample_option == 'normal':
-                        flat_codes[~err_mask] = torch.multinomial(
-                            probs[~err_mask], 1
-                        ).squeeze(-1)
-                    else:
-                        raise ValueError('Invalid resample option')
-                else:
-                    break
-
-            z = self.feature_extractor_model.vector_quantization.embed(
-                flat_codes.view(lead_dim, *codes.shape[1:])
-            )
-            img_recon = torch.stack([
-                self.feature_extractor_model.decoder(
-                    z[i * num_reconstructions : (i+1) * num_reconstructions]
-                ) for i in range(codes.size(0))
-            ])
-
-            outp = self.prior_model.forward(self.to_onehot(flat_codes), mask = None)
-            losses = F.cross_entropy(
-                outp.transpose(-1, 1),
-                self.to_onehot(orig_flat_codes).transpose(-1, 1),
-                reduction = 'none',
-                **kwargs
-            ).mean(dim = -1).view(codes.size(0), num_reconstructions)
-
-        return img_recon, losses
+        return reconstruct_by_codes(
+            self.feature_extractor_model,
+            self.prior_model, # type: ignore
+            flat_codes, orig_flat_codes,
+            num_reconstructions,
+             **kwargs
+        )
 
     def sample(
             self,
@@ -183,20 +92,11 @@ class VQLatentTransformer(VQLatentPriorModel):
             image_chw : Optional[Tuple[int, int, int]] = None,
             **kwargs
         ):
+        ''' sample images from the prior model, optionally conditioned on input images '''
         dev = next(self.parameters()).device
-        if cond is None:
-            assert image_chw is not None, 'Require input image shape'
-            cond = torch.rand(num_images, *image_chw).to(dev)
-            n_iters = kwargs.pop('n_iters', 3)
-            loss_quantile = kwargs.pop('loss_quantile', 0.1)
-        else:
-            assert isinstance(cond, torch.Tensor)
-            if image_chw is not None:
-                assert tuple(cond.shape[-3:]) == tuple(image_chw[::-1]), \
-                    'Incompatible conditional shape'
-            cond = self._batch_cond(num_images, cond, expected_dim = 4).to(dev)
-            n_iters = kwargs.pop('n_iters', 1)
-            loss_quantile = kwargs.pop('loss_quantile', 0.75)
+        cond, n_iters, loss_quantile, kwargs = create_sample_cond(
+            image_chw, cond, num_images, dev, kwargs
+        )
 
         with torch.no_grad():
             codes = self.retrieve_codes(cond, None)

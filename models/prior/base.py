@@ -7,9 +7,8 @@ from abc import abstractmethod
 
 import torch
 from torch import nn
-from torch.nn import functional as F
 
-from ..vqvae import VQVAE
+from ..vqvae import AbstractQuantVAE
 
 class PriorModel(nn.Module):
     '''
@@ -30,17 +29,11 @@ class PriorModel(nn.Module):
         raise NotImplementedError
 
 
-class VQLatentPriorModel(nn.Module):
+class AbstractVQLatentPriorModel(nn.Module):
     '''
-        Transformer model leanring prior in the latent space of a VQ-VAE
+        Abstract class for VQ-VAE latent prior models
     '''
-    def __init__(
-            self,
-            feature_extractor_model : VQVAE,
-            prior_model : Union[PriorModel, Type],
-            code_shape : Tuple[int, int],
-            **kwargs
-        ):
+    def __init__(self, feature_extractor_model : AbstractQuantVAE, **kwargs):
         super().__init__()
         for p in feature_extractor_model.parameters():
             p.requires_grad = False
@@ -48,24 +41,9 @@ class VQLatentPriorModel(nn.Module):
         self.feature_extractor_model = feature_extractor_model
         self.feature_extractor_model.eval()
 
-        if isinstance(prior_model, PriorModel):
-            if prior_model.in_channels != feature_extractor_model.code_size or \
-                prior_model.code_shape != tuple(code_shape):
-                raise ValueError('Incompatible prior model')
-            self.prior_model : PriorModel = prior_model
-        elif isinstance(prior_model, type):
-            self.prior_model : PriorModel = prior_model(
-                in_channels = feature_extractor_model.code_size,
-                code_shape = code_shape,
-                **kwargs
-            )
-        else:
-            raise ValueError('"prior_model" must be nn.Module or Type')
-
     def to(self, device, *args, **kwargs):
         '''Override to() to ensure encoder to use correct device'''
         self.feature_extractor_model.to(device)
-        self.prior_model.to(device)
         super().to(device, *args, **kwargs)
 
     def retrieve_codes(self, x, cond):
@@ -78,14 +56,13 @@ class VQLatentPriorModel(nn.Module):
             _, code = self.feature_extractor_model.codebook(x, cond)
         return code
 
+    @abstractmethod
     def forward(self, x, cond = None):
         '''Retrieve codes for images'''
-        code = self.retrieve_codes(x, cond)
-        return self.prior_model.forward(code, cond)
 
-    def forward_latent(self, code, cond = None):
+    @abstractmethod
+    def forward_latent(self, codes, cond = None):
         '''Forward pass in latent space'''
-        return self.prior_model.forward(code, cond)
 
     @abstractmethod
     def loss(
@@ -100,8 +77,8 @@ class VQLatentPriorModel(nn.Module):
     @abstractmethod
     def _restore_abnormal(
             self,
-            codes : torch.Tensor,
-            logit_threshold : float,
+            codes : Union[torch.Tensor, Tuple[torch.Tensor, ...]],
+            logit_threshold : Union[float, Tuple[float, ...]],
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
             n_iters : int = 1,
@@ -114,8 +91,8 @@ class VQLatentPriorModel(nn.Module):
 
     def restore_by_codes(
         self,
-        codes : torch.Tensor,
-        logit_threshold : float,
+        codes : Union[torch.Tensor, Tuple[torch.Tensor, ...]],
+        logit_threshold : Union[float, Tuple[float, ...]],
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
         n_iters : int = 1,
@@ -133,7 +110,7 @@ class VQLatentPriorModel(nn.Module):
     def restore_images(
         self,
         images : torch.Tensor,
-        logit_threshold : float,
+        logit_threshold : Union[float, Tuple[float, ...]],
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
         **kwargs
@@ -146,29 +123,6 @@ class VQLatentPriorModel(nn.Module):
             is_thres_quantile = is_thres_quantile,
             **kwargs
         )
-
-    def _batch_cond(
-        self,
-        num_images : int,
-        cond : Optional[torch.Tensor] = None,
-        expected_dim : int = 3
-    ) -> Optional[torch.Tensor]:
-        ''' make cond's batch size compatible '''
-        if cond is None:
-            return None
-
-        if len(cond.shape) == expected_dim - 1:
-            return cond.unsqueeze(0).repeat(
-                num_images, *([1] * (expected_dim-1))
-            )
-
-        assert len(cond.shape) == expected_dim, 'Invalid conditional shape'
-        if cond.size(0) == 1:
-            return cond.repeat(num_images, *cond.shape[1:])
-        if cond.size(0) == num_images:
-            return cond
-
-        raise ValueError('Invalid conditional shape')
 
     @abstractmethod
     def sample(
@@ -185,7 +139,7 @@ class VQLatentPriorModel(nn.Module):
     def pixelwise_anomaly_score(
         self,
         images : torch.Tensor,
-        logit_threshold : float,
+        logit_threshold : Union[float, Tuple[float, ...]],
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
         **kwargs
@@ -209,3 +163,65 @@ class VQLatentPriorModel(nn.Module):
         recon = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * recons
             ).sum(dim = 1)
         return torch.abs(x_0 - recon), recon
+
+
+class VQLatentPriorModel(AbstractVQLatentPriorModel):
+    '''
+        General model leanring prior in the latent space of a VQ-VAE
+    '''
+    def __init__(
+            self,
+            feature_extractor_model : AbstractQuantVAE,
+            prior_model : Union[PriorModel, Type],
+            code_shape : Tuple[int, int],
+            **kwargs
+        ):
+        super().__init__(feature_extractor_model = feature_extractor_model, **kwargs)
+
+        if isinstance(prior_model, PriorModel):
+            if prior_model.in_channels != feature_extractor_model.code_size or \
+                prior_model.code_shape != tuple(code_shape):
+                raise ValueError('Incompatible prior model')
+            self.prior_model : PriorModel = prior_model
+        elif isinstance(prior_model, type):
+            self.prior_model : PriorModel = prior_model(
+                in_channels = feature_extractor_model.code_size,
+                code_shape = code_shape,
+                **kwargs
+            )
+        else:
+            raise ValueError('"prior_model" must be nn.Module or Type')
+
+    def to(self, device, *args, **kwargs):
+        '''Override to() to ensure encoder to use correct device'''
+        self.prior_model.to(device)
+        super().to(device, *args, **kwargs)
+
+    def forward(self, x, cond = None):
+        '''Retrieve codes for images'''
+        codes = self.retrieve_codes(x, cond)
+        return self.prior_model.forward(codes, cond)
+
+    def forward_latent(self, codes, cond = None):
+        '''Forward pass in latent space'''
+        return self.prior_model.forward(codes, cond)
+
+    def sample(
+        self,
+        num_images : int ,
+        cond : Optional[Any] = None,
+        image_chw : Optional[Tuple[int, int, int]] = None,
+        **kwargs
+    ) -> torch.Tensor:
+        raise NotImplementedError('Sampling not implemented for general latent prior model')
+
+    def _restore_abnormal(
+        self,
+        codes: torch.Tensor,
+        logit_threshold: float,
+        num_reconstructions: int = 1,
+        is_thres_quantile: bool = False,
+        n_iters: int = 1,
+        **kwargs
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        raise NotImplementedError('Restoration not implemented for general latent prior model')

@@ -17,7 +17,7 @@ import torch
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
 
 from utils import load_model_from_state_dict, parse_kwargs
-from models.prior.base import VQLatentPriorModel
+from models.prior.base import AbstractVQLatentPriorModel
 
 STOP_SIG = threading.Event()
 
@@ -29,7 +29,7 @@ def signal_handler(_, __):
     STOP_SIG.set()
 
 def gen_images(
-    model : VQLatentPriorModel,
+    model : AbstractVQLatentPriorModel,
     normalizer : ImageNormalizer,
     output_dir : str,
     image_chw : Optional[Tuple[int, int, int]] = None,
@@ -136,7 +136,7 @@ def main():
     os.makedirs(args.output_dir, exist_ok = True)
 
     model, cfg = load_model_from_state_dict(args.model, None)
-    assert isinstance(model, VQLatentPriorModel), 'Invalid model file'
+    assert isinstance(model, AbstractVQLatentPriorModel), 'Invalid model file'
     normalizer : ImageNormalizer = ImageNormalizer(
         cfg['train']['data'].get('transforms', []),
         cfg['train']['data'].get('normalization', None),

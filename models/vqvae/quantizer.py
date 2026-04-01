@@ -90,6 +90,10 @@ class VectorQuantizer(Quantizer):
         perplexity = torch.exp(-torch.sum(e_mean * torch.log(e_mean + 1e-10)))
 
         # reshape back to match original input shape
+        min_encodings = min_encodings.view(
+            b, h, w, self.n_embeddings
+        ).permute(0, 3, 1, 2).contiguous()
+
         z_q = z_q.permute(0, 3, 1, 2).contiguous()
 
         return (
@@ -230,15 +234,13 @@ class FiniteScalarQuantizer(Quantizer):
         z = z.permute(0, 2, 3, 1).contiguous()
         codes = self.quantize(self._embd_in(z.view(-1, self.embedding_dim)))
         encodings = self._embd_out(codes).view(z.shape).permute(0, 3, 1, 2).contiguous()
-
-
         encoding_indices = self.codes_to_indices(codes).view(b, h, w)
 
         return (
             torch.zeros(1).to(self.device), # loss
             encodings, # quantized latent vec
             torch.zeros(1).to(self.device),
-            codes,
+            codes.view(b, h, w, self.n_levels).permute(0, 3, 1, 2).contiguous(),
             encoding_indices
         )
 

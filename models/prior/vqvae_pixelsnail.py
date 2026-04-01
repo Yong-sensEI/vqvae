@@ -11,6 +11,7 @@ from torch.nn import functional as F
 from .pixelsnail import PixelSNAIL
 from .base import VQLatentPriorModel
 from ..vqvae import VQVAE
+from .transfomer_utils import batch_cond
 
 class VQLatentSNAIL(VQLatentPriorModel):
     '''
@@ -54,7 +55,7 @@ class VQLatentSNAIL(VQLatentPriorModel):
         dev = next(self.parameters()).device
         if cond is not None:
             cond = self.retrieve_codes(
-                self._batch_cond(num_images, cond, expected_dim = 4).to(dev),
+                batch_cond(num_images, cond, expected_dim = 4).to(dev),
                 None
             )
         with torch.no_grad():
@@ -73,6 +74,7 @@ class VQLatentSNAIL(VQLatentPriorModel):
             logit_threshold : float,
             num_reconstructions : int = 1,
             is_thres_quantile : bool = False,
+            n_iters : int = 1,
             **kwargs
         ) -> torch.Tensor:
         code_size = codes.shape[-2:]

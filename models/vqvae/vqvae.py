@@ -1,7 +1,6 @@
 '''
     VQ-VAE model
 '''
-from typing import Union, Tuple
 
 from .quantizer import VectorQuantizer, FiniteScalarQuantizer
 from .base import QuantVAE
@@ -20,7 +19,7 @@ class VQVAE(QuantVAE):
             num_embeddings,
             embedding_dim,
             commitment_cost,
-            downsize_steps
+            downsize_steps : int = 2
         ):
         super().__init__(
             in_channel,
@@ -31,7 +30,7 @@ class VQVAE(QuantVAE):
             downsize_steps = downsize_steps
         )
         # pass continuous latent vector through discretization bottleneck
-        self.vector_quantization = VectorQuantizer(
+        self._vector_quantization = VectorQuantizer(
             num_embeddings, embedding_dim, commitment_cost
         )
 
@@ -45,7 +44,7 @@ class FSQVAE(QuantVAE):
             residual_layers,
             levels,
             embedding_dim,
-            downsize_steps,
+            downsize_steps : int = 2,
             **kwargs
         ):
         super().__init__(
@@ -57,4 +56,4 @@ class FSQVAE(QuantVAE):
             downsize_steps = downsize_steps
         )
         # pass continuous latent vector through discretization bottleneck
-        self.vector_quantization = FiniteScalarQuantizer(levels, embedding_dim, **kwargs)
+        self._vector_quantization = FiniteScalarQuantizer(levels, embedding_dim, **kwargs)

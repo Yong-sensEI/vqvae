@@ -1,0 +1,109 @@
+{
+    "model": {
+        "type": "models.vqvae.MultiscaleQuantVAE",
+        "base_vae_type": "models.vqvae.FSQVAE",
+        "detail_vae_type": "models.vqvae.FSQVAE",
+        "base_vae_kwargs": {
+            "num_hidden": 256,
+            "num_residual_hidden": 256,
+            "residual_layers": 4,
+            "embedding_dim": 8,
+            "levels": [4, 2],
+            "bound_function": "ifsq",
+            "downsize_steps": 3
+        },
+        "detail_vae_kwargs": {
+            "num_hidden": 256,
+            "num_residual_hidden": 256,
+            "residual_layers": 4,
+            "embedding_dim": 16,
+            "levels": [4, 2, 2],
+            "bound_function": "ifsq",
+            "downsize_steps": 2
+        },
+        "in_channel": 1,
+        "num_hidden": 64,
+        "num_residual_hidden": 64
+    },
+    "train": {
+        "data": {
+            "train_files": [
+                "/nfs_share/tcu_dataset/tcu_good_crops/train.txt"
+            ],
+            "validation_files": [
+                "/nfs_share/tcu_dataset/tcu_good_crops/val.txt"
+            ],
+            "loader": {
+                "batch_size": 64,
+                "num_workers": 22
+            },
+            "transforms": [
+                {
+                    "type": "torchvision.transforms.v2.Resize",
+                    "args": [
+                        [256, 256]
+                    ]
+                },
+                {
+                    "type": "torchvision.transforms.v2.RandomAdjustSharpness",
+                    "args": [2.0, 0.5]
+                },                
+                {
+                    "type": "torchvision.transforms.v2.RandomHorizontalFlip"
+                },
+                {
+                    "type": "torchvision.transforms.v2.RandomVerticalFlip"
+                },
+                {
+                    "type": "torchvision.transforms.v2.ColorJitter",
+                    "kwargs": {
+                        "brightness": 0.2, 
+                        "contrast": 0.5,
+                        "saturation": 0.2, 
+                        "hue": 0.0
+                    }
+                },             
+                {
+                    "type": "torchvision.transforms.v2.RandomRotation",
+                    "args": [
+                        [-10, 10]
+                    ]
+                },
+                {
+                    "type": "torchvision.transforms.v2.RandomAffine",
+                    "kwargs": {
+                        "degrees": 5,
+                        "scale": [0.95, 1.05]
+                    }
+                }                
+            ],
+            "normalization": null,
+            "colorspace": null
+        },
+        "epochs": 100,
+        "num_steps_train": 100,
+        "num_steps_validation": 25,
+        "optimizer": {
+            "type": "torch.optim.AdamW",
+            "kwargs": {
+                "lr": 1e-4,
+                "amsgrad": true
+            }
+        },
+        "scheduler": {
+            "type": "torch.optim.lr_scheduler.StepLR",
+            "kwargs": {
+                "step_size": 25,
+                "gamma": 0.1
+            }
+        },
+        "checkpoint": {
+            "path": "/nfs_share/tcu_dataset/checkpoints/vqvae/",
+            "interval": 0,
+            "keyword": "tcu_256x256_base_32x32_d8_42_detail_64x64_d16_422"
+        },
+        "loss": {
+            "type": "l1"
+        }
+    }
+}

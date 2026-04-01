@@ -20,8 +20,8 @@ from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime
 
 from utils import load_model_from_state_dict, parse_kwargs
-from models.prior.base import VQLatentPriorModel
-from models.vqvae.vqvae import VQVAE
+from models.prior.base import AbstractVQLatentPriorModel
+from models.vqvae import AbstractQuantVAE
 
 STOP_SIG = Event()
 
@@ -120,8 +120,8 @@ def eval_model(
         evaluate model on the given dataset
     '''
 
-    vae_model : Optional[VQVAE] = None
-    prior_model : Optional[VQLatentPriorModel] = None
+    vae_model : Optional[AbstractQuantVAE] = None
+    prior_model : Optional[AbstractVQLatentPriorModel] = None
     vae_cfg, prior_cfg = None, None
     if isinstance(args.vae_model, str):
         print(f"Loading VAE model from {args.vae_model}")

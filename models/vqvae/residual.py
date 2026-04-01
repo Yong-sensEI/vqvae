@@ -1,9 +1,7 @@
+''' Residual layer module for VQ-VAE '''
 
-import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
-import numpy as np
-
 
 class ResidualLayer(nn.Module):
     """
@@ -13,14 +11,15 @@ class ResidualLayer(nn.Module):
     - res_h_dim : the hidden dimension of the residual block
     """
 
-    def __init__(self, in_dim, h_dim, res_h_dim):
+    def __init__(self, in_dim, h_dim, res_h_dim, out_dim = None):
         super().__init__()
+        out_dim = out_dim or h_dim
         self.res_block = nn.Sequential(
             nn.ReLU(True),
             nn.Conv2d(in_dim, res_h_dim, kernel_size=3,
                       stride=1, padding=1, bias=False),
             nn.ReLU(True),
-            nn.Conv2d(res_h_dim, h_dim, kernel_size=1,
+            nn.Conv2d(res_h_dim, out_dim, kernel_size=1,
                       stride=1, bias=False)
         )
 
