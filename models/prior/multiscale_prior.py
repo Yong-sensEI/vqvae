@@ -81,10 +81,9 @@ class MultiscalePriorModel(AbstractVQLatentPriorModel):
         n_batches = base_losses['pred'].size(0)
         return {
             'loss': base_losses['loss'] + detail_losses['loss'] if \
-                reduction != 'none' else torch.cat((
-                    base_losses['loss'].view(base_codes.size(0), -1),
-                    detail_losses['loss'].view(base_codes.size(0), -1)
-                ), dim = -1
+                reduction != 'none' else (
+                base_losses['loss'].view(base_codes.size(0), -1),
+                detail_losses['loss'].view(base_codes.size(0), -1)
             ),
             'pred': torch.cat((
                 base_losses['pred'].view(n_batches, -1),

@@ -62,7 +62,7 @@ def parse_args():
         help="Device to run the evaluation on (default: 'cuda')."
     )
     parser.add_argument(
-        '--logit-thres', type=float, required=False, default=0.9,
+        '--logit-thres', type=float, nargs='+', required=False, default=0.9,
         help='Logit threshold to computer anomaly score'
     )
     parser.add_argument(
@@ -98,8 +98,11 @@ def parse_args():
         sys.argv.append("-h")
     args = parser.parse_args()
 
-    if args.rel_thres and not 0 < args.logit_thres < 1:
+    if args.rel_thres and any(not (0 < t < 1) for t in args.logit_thres):
         raise ValueError('Invalid logit percentile threshold')
+
+    if len(args.logit_thres) == 1:
+        args.logit_thres = args.logit_thres[0]
 
     if args.pixelwise_as and args.restore_num < 3:
         print('Pixel-wise anomaly score requires at least 3 reconstructions.', end=' ')
@@ -297,7 +300,10 @@ def eval_model(
             loss = loss_dict['loss'][0]
             score = torch.sum(
                 loss * (loss > args.logit_thres)
-            ).item()
+            ).item() if isinstance(args.logit_thres, float) else \
+                sum(torch.sum(
+                    loss * (loss > t)
+                ).item() for t in args.logit_thres)
             losses['anomaly_score'].append(score)
 
             if args.restore_num > 0 and not args.pixelwise_as:
