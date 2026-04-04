@@ -4,6 +4,7 @@
 from typing import Dict, Optional, Tuple, Union, List
 import os
 import random
+from glob import glob
 
 import torch
 from torch.utils.data import DataLoader
@@ -13,18 +14,38 @@ from yw_basics.utils import current_datetime, import_object
 
 from models.prior.base import AbstractVQLatentPriorModel
 
+def get_image_files(filepaths : List[str]):
+    img_files = []
+    label_files = []
+    for f_ in filepaths:
+        if os.path.isfile(f_):
+            if ImageClassificationDataset.is_image_file(f_):
+                img_files.append(f_)
+            else:
+                label_files.append(f_)
+        elif os.path.isdir(f_):
+            files = glob(os.path.join(f_, "*.*"))
+            img_f, lb_f = get_image_files(files)
+            img_files.extend(img_f)
+            label_files.extend(lb_f)
+    return img_files, label_files
+
 def get_datasets(data_cfg : Dict):
     '''
         Create torch dataset.
     '''
+    train_imgs, train_lbs = get_image_files(data_cfg['train_files'])
+    val_imgs, val_lbs = get_image_files(data_cfg['validation_files'])
     train_data = ImageClassificationDataset(
-        label_files = data_cfg['train_files'],
+        label_files = train_lbs,
+        image_files = train_imgs,
         transforms_configs = data_cfg.get('transforms', []),
         normalization_option = data_cfg.get('normalization', None),
         colorspace=data_cfg.get('colorspace', None)
     )
     val_data = ImageClassificationDataset(
-        label_files = data_cfg['validation_files'],
+        label_files = val_lbs,
+        image_files = val_imgs,
         transforms_configs = data_cfg.get('transforms', []),
         normalization_option = data_cfg.get('normalization', None),
         colorspace=data_cfg.get('colorspace', None)
@@ -41,6 +62,7 @@ def get_datasets(data_cfg : Dict):
         raise ValueError(
             'Normalization options for training and validation datasets must be the same.'
         )
+    print(f'Load {len(train_data)} images for training and {len(val_data)} images for validation')
     return train_data, val_data
 
 def get_data_variance(

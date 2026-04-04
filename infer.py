@@ -62,7 +62,7 @@ def parse_args():
         help="Device to run the evaluation on (default: 'cuda')."
     )
     parser.add_argument(
-        '--logit-thres', type=float, nargs='+', required=False, default=0.9,
+        '--logit-thres', type=float, nargs='+', required=False, default=[0.9],
         help='Logit threshold to computer anomaly score'
     )
     parser.add_argument(
