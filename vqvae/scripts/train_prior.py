@@ -12,7 +12,7 @@ import torch
 
 from yw_basics.utils import import_object
 
-import utils
+from vqvae import utils
 
 STOP_SIG = threading.Event()
 
@@ -40,33 +40,34 @@ def train(args):
     train_cfg = cfg['train']
     model_cfg = cfg['model']
     data_cfg = train_cfg['data']
-    loss_cfg = train_cfg.get('loss', {})
+
+    if 'encoder' not in cfg:
+        raise ValueError("Encoder configuration must be provided in the config.")
+
+    encoder_cfg = cfg['encoder']
+
+    if 'checkpoint' not in encoder_cfg:
+        raise ValueError("Encoder checkpoint path must be provided in the config.")
+
+    ckpt = torch.load(
+        encoder_cfg['checkpoint'],
+        weights_only = False
+    )
+    encoder = utils.load_model_from_state_dict(ckpt, None, None)[0]
+    encoder.to(device)
+    encoder.eval()
 
     # Load data and define batch data loaders
     training_data, validation_data = utils.get_datasets(data_cfg)
-
-    loss_type = loss_cfg.get('type', 'l1')
-    commitment_weight = loss_cfg.get('commitment_weight', 1.0)
-    if loss_type == 'l2':
-        x_train_var = utils.get_data_variance(training_data, 1000)
-        x_eval_var = utils.get_data_variance(validation_data, 1000)
-        print(f'Training data variance: {x_train_var:.4f}')
-        print(f'Validation data variance: {x_eval_var:.4f}')
-    else:
-        x_train_var, x_eval_var = None, None
-
     training_loader, validation_loader = utils.get_data_loaders(
         training_data, validation_data, data_cfg
     )
 
-    if 'checkpoint' in model_cfg:
-        ckpt = torch.load(
-            model_cfg['checkpoint'],
-            weights_only = False
-        )
-        model, _ = utils.load_model_from_state_dict(ckpt, None, None)
-    else:
-        model = import_object(model_cfg.pop('type'))(**model_cfg)
+    model_type = import_object(model_cfg.pop('type'))
+    model = model_type(
+        feature_extractor_model = encoder,
+        **model_cfg
+    )
     model.to(device)
 
     # Set up optimizer and training loop
@@ -84,12 +85,12 @@ def train(args):
 
     def train_epoch():
         results = {
-            'recon_errors': [],
-            'embedding_loss': [],
-            'perplexities': [],
+            'loss': [],
+            'accuracy': []
         }
 
         model.train()
+        encoder.eval()
         for _ in tqdm(range(train_cfg['num_steps_train'])):
             if STOP_SIG.is_set():
                 break
@@ -98,36 +99,33 @@ def train(args):
             x = x.to(device)
             optimizer.zero_grad()
 
-            embedding_loss, x_hat, perplexity, _, _ = model(x)
-            recon_loss = torch.mean((x_hat - x)**2) / x_train_var \
-                if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
-            loss = recon_loss + embedding_loss * commitment_weight
+            loss_pred = model.loss(x)
+            loss = loss_pred['loss']
+            acc = (loss_pred['pred'] == loss_pred['target']).float().mean()
 
             loss.backward()
             optimizer.step()
 
-            results["recon_errors"].append(recon_loss.item())
-            results["perplexities"].append(perplexity.item())
-            results["embedding_loss"].append(embedding_loss.item())
+            results["loss"].append(loss.item())
+            results["accuracy"].append(acc.item())
 
         scheduler.step()
 
         if not STOP_SIG.is_set():
             print(
-                f"Training reconstruction error: {np.mean(results['recon_errors']):.4f}",
-                f"embedding loss: {np.mean(results['embedding_loss']):.4f}",
-                f"perplexity: {np.mean(results['perplexities']):.4f}"
+                f"Training loss: {np.mean(results['loss']):.4f}",
+                f"accuracy: {np.mean(results['accuracy']):.4f}"
             )
         return results
 
     def validate_epoch():
         results = {
-            'recon_errors': [],
-            'embedding_loss': [],
-            'perplexities': [],
+            'loss': [],
+            'accuracy': []
         }
 
         model.eval()
+        encoder.eval()
         for _ in tqdm(range(train_cfg['num_steps_validation'])):
             if STOP_SIG.is_set():
                 break
@@ -136,19 +134,17 @@ def train(args):
             x = x.to(device)
 
             with torch.no_grad():
-                embedding_loss, x_hat, perplexity, _, _ = model(x)
-            recon_loss = torch.mean((x_hat - x)**2) / x_eval_var \
-                if loss_type == 'l2' else torch.mean(torch.abs(x_hat - x))
+                loss_pred = model.loss(x)
+            loss = loss_pred['loss']
+            acc = (loss_pred['pred'] == loss_pred['target']).float().mean()
 
-            results["recon_errors"].append(recon_loss.item())
-            results["perplexities"].append(perplexity.item())
-            results["embedding_loss"].append(embedding_loss.item())
+            results["loss"].append(loss.item())
+            results["accuracy"].append(acc.item())
 
         if not STOP_SIG.is_set():
             print(
-                f"Validation reconstruction error: {np.mean(results['recon_errors']):.4f}",
-                f"embedding loss: {np.mean(results['embedding_loss']):.4f}",
-                f"perplexity: {np.mean(results['perplexities']):.4f}"
+                f"Validation loss: {np.mean(results['loss']):.4f}",
+                f"accuracy: {np.mean(results['accuracy']):.4f}"
             )
         return results
 
@@ -173,7 +169,7 @@ def train(args):
 
             fn = utils.save_model_and_results(
                 save_path, model, orig_cfg, train_results, val_results,
-                ckpt_cfg.get('keyword', 'vqvae') + (
+                ckpt_cfg.get('keyword', 'pixelsnail') + (
                     '_final' if is_final else f'_{epoch + 1}'
                 )
             )

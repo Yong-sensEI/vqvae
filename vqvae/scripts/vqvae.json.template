@@ -1,6 +1,6 @@
 {
     "model": {
-        "type": "models.vqvae.FSQVAE",
+        "type": "vqvae.models.vqvae.FSQVAE",
         "in_channel": 1,
         "num_hidden": 256,
         "num_residual_hidden": 256,

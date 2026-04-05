@@ -12,9 +12,12 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime, import_object
 
-from models.prior.base import AbstractVQLatentPriorModel
+from ..models.prior.base import AbstractVQLatentPriorModel
 
 def get_image_files(filepaths : List[str]):
+    '''
+        process file paths to find image files
+    '''
     img_files = []
     label_files = []
     for f_ in filepaths:

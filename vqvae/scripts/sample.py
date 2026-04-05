@@ -15,9 +15,8 @@ from PIL import Image
 import torch
 
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
-
-from utils import load_model_from_state_dict, parse_kwargs
-from models.prior.base import AbstractVQLatentPriorModel
+from vqvae.models.prior.base import AbstractVQLatentPriorModel
+from vqvae.utils import load_model_from_state_dict, parse_kwargs
 
 STOP_SIG = threading.Event()
 

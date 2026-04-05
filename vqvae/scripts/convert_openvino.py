@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import openvino as ov
 
-from utils import load_model_from_state_dict
+from vqvae.utils import load_model_from_state_dict
 
 logger = logging.getLogger(__name__)
 

@@ -1,0 +1,14 @@
+[build-system]
+requires = [
+    "setuptools",
+    "packaging"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vqvae"
+version = "1.0"
+description = "VQ-VAE for defect detection"
+
+[tool.setuptools]
+packages = ["vqvae"]

@@ -13,9 +13,8 @@ from PIL import Image
 import shortuuid
 
 from yw_basics.dataloader import ImageNormalizer, ImageTaskDataset
-
-from utils import load_model_from_state_dict, parse_kwargs
-from models.prior.vqvae_transformer import VQLatentTransformer
+from vqvae.models.prior.vqvae_transformer import VQLatentTransformer
+from vqvae.utils import load_model_from_state_dict, parse_kwargs
 
 def mix_images(
     model : VQLatentTransformer,

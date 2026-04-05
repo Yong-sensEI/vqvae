@@ -19,9 +19,9 @@ from torch.utils.data import DataLoader
 from yw_basics.dataloader import ImageClassificationDataset
 from yw_basics.utils import current_datetime
 
-from utils import load_model_from_state_dict, parse_kwargs
-from models.prior.base import AbstractVQLatentPriorModel
-from models.vqvae import AbstractQuantVAE
+from vqvae.models.prior.base import AbstractVQLatentPriorModel
+from vqvae.models.vqvae import AbstractQuantVAE
+from vqvae.utils import load_model_from_state_dict, parse_kwargs
 
 STOP_SIG = Event()
 

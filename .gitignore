@@ -11,3 +11,5 @@ samples/
 **/*.out
 reconstructions/
 **/temp
+**/vqvae.egg-info
+**/build
