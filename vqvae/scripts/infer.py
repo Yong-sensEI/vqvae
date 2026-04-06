@@ -348,6 +348,7 @@ def eval_model(
     if len(score_imgs) > 0:
         i_min = np.min([np.min(m) for m in score_imgs.values()])
         i_max = np.max([np.max(m) for m in score_imgs.values()])
+        print(f'Maximum (minimum) anomaly score is {i_max} ({i_min})')
         for fn, score_img in tqdm(score_imgs.items(), desc="Saving score maps"):
             score_img = ((score_img.astype(float) - i_min) / (i_max - i_min) * 255
                 ).astype(np.uint8)

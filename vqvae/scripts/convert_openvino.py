@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 
 import torch
-import torch.nn as nn
+from torch import nn
 import openvino as ov
 
 from vqvae.utils import load_model_from_state_dict

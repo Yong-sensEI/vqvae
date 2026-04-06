@@ -9,7 +9,7 @@ samples/
 **/*.json
 **/*.pth
 **/*.out
-reconstructions/
+recon*/
 **/temp
 **/vqvae.egg-info
 **/build

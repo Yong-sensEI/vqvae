@@ -9,10 +9,38 @@ from glob import glob
 import torch
 from torch.utils.data import DataLoader
 
-from yw_basics.dataloader import ImageClassificationDataset
+from yw_basics.dataloader import ImageClassificationDataset, ImageNormalizer
 from yw_basics.utils import current_datetime, import_object
 
 from ..models.prior.base import AbstractVQLatentPriorModel
+
+def get_normalizer(
+        data_config : Dict,
+        image_size : Optional[Tuple[int, int]],
+        eval_mode : bool
+    ) -> ImageNormalizer:
+    ''' Construct a image normalizer '''
+    transform_cfg = data_config.get('transforms', [])
+    if image_size is not None:
+        transform_cfg = [
+            {
+                "type": "torchvision.transforms.v2.Resize",
+                "args": list(image_size)
+            }
+        ] + [
+            cfg for cfg in transform_cfg if '.Resize' not in cfg['type']
+        ]
+    if eval_mode:
+        transform_cfg = [
+            cfg for cfg in transform_cfg if '.Resize' in cfg['type']
+        ]
+
+    return ImageNormalizer(
+        transform_cfg,
+        normalization_option = data_config.get('normalization', None),
+        colorspace = data_config.get('colorspace', None),
+        eval_mode = eval_mode
+    )
 
 def get_image_files(filepaths : List[str]):
     '''
