@@ -72,23 +72,23 @@ def get_datasets(data_cfg : Dict):
         image_files = train_imgs,
         transforms_configs = data_cfg.get('transforms', []),
         normalization_option = data_cfg.get('normalization', None),
-        colorspace=data_cfg.get('colorspace', None)
+        colorspace = data_cfg.get('colorspace', None)
     )
     val_data = ImageClassificationDataset(
         label_files = val_lbs,
         image_files = val_imgs,
         transforms_configs = data_cfg.get('transforms', []),
         normalization_option = data_cfg.get('normalization', None),
-        colorspace=data_cfg.get('colorspace', None)
+        colorspace = data_cfg.get('colorspace', None)
     )
-    if not (
-        train_data.normalization_option is None or
-        isinstance(train_data.normalization_option, str) and
-        train_data.normalization_option.lower() == 'none'
-    ):
-        raise ValueError(
-            'Normalization option for training dataset must be none'
-        )
+    #if not (
+    #    train_data.normalization_option is None or
+    #    isinstance(train_data.normalization_option, str) and
+    #    train_data.normalization_option.lower() == 'none'
+    #):
+    #    raise ValueError(
+    #        'Normalization option for training dataset must be none'
+    #    )
     if train_data.normalization_option != val_data.normalization_option:
         raise ValueError(
             'Normalization options for training and validation datasets must be the same.'

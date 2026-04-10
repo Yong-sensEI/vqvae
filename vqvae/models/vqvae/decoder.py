@@ -1,8 +1,6 @@
 ''' CNN based decoder '''
 
-import torch
 from torch import nn
-import numpy as np
 from .residual import ResidualStack
 
 
@@ -42,11 +40,18 @@ class Decoder(nn.Module):
 
         self.inverse_conv_stack = nn.Sequential(
             nn.ConvTranspose2d(
-                in_dim, h_dim, kernel_size=kernel-1, stride=stride-1, padding=1),
+                in_dim, h_dim,
+                kernel_size=kernel-1, stride=stride-1, padding=1
+            ),
+            *[nn.Conv2d(
+                h_dim, h_dim,
+                kernel_size=kernel-1, stride=stride-1, padding=1
+            ) for _ in range(max(2 - upsize_steps, 0))],
             ResidualStack(h_dim, h_dim, res_h_dim, n_res_layers),
             *upsize_layers,
-            nn.ConvTranspose2d(h_dim//2, out_channel, kernel_size=kernel,
-                               stride=stride, padding=1)
+            nn.ConvTranspose2d(
+                h_dim//2 if len(upsize_layers) > 0 else h_dim, out_channel,
+                kernel_size=kernel, stride=stride, padding=1)
         )
 
     def forward(self, x):

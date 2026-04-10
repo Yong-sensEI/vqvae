@@ -56,6 +56,15 @@ class AbstractVQLatentPriorModel(nn.Module):
             _, code = self.feature_extractor_model.codebook(x, cond)
         return code
 
+    def eval(self):
+        self.feature_extractor_model.eval()
+        return super().eval()
+
+    def train(self, mode: bool = True):
+        ret = super().train(mode)
+        self.feature_extractor_model.eval()
+        return ret
+
     @abstractmethod
     def forward(self, x, cond = None):
         '''Retrieve codes for images'''

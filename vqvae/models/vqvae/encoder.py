@@ -19,7 +19,7 @@ class Encoder(nn.Module):
 
     """
 
-    def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim, downsize_steps = 2):
+    def __init__(self, in_dim, h_dim, n_res_layers, res_h_dim, downsize_steps=2):
         super().__init__()
         kernel = 4
         stride = 2
@@ -28,8 +28,9 @@ class Encoder(nn.Module):
             if i == 0:
                 downsize_layers.append(
                     nn.Conv2d(
-                        in_dim, h_dim // 2, kernel_size=kernel,
-                        stride=stride, padding=1
+                        in_dim,
+                        h_dim // 2 if downsize_steps > 1 else h_dim,
+                        kernel_size=kernel, stride=stride, padding=1
                     )
                 )
             elif i == downsize_steps - 1:
@@ -48,8 +49,10 @@ class Encoder(nn.Module):
 
         self.conv_stack = nn.Sequential(
             *downsize_layers,
-            nn.Conv2d(h_dim, h_dim, kernel_size=kernel-1,
-                      stride=stride-1, padding=1),
+            *[nn.Conv2d(
+                h_dim, h_dim, kernel_size=kernel-1,
+                stride=stride-1, padding=1
+            ) for _ in range(max(3 - downsize_steps, 1))],
             ResidualStack(
                 h_dim, h_dim, res_h_dim, n_res_layers)
         )
