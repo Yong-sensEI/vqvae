@@ -329,9 +329,11 @@ def eval_model(
                     args.logit_thres,
                     num_reconstructions = args.restore_num,
                     is_thres_quantile = args.rel_thres,
+                    image_transform = dat_set.denormalize_tensor,
                     **kwargs
                 )
-                score_img = dat_set.image_tensor_to_numpy(score_map[0].cpu())
+                score_img = (score_map[0].cpu().numpy() * 255).astype(
+                    np.uint8).transpose(1, 2, 0)
                 recon_img = dat_set.image_tensor_to_numpy(recon[0].cpu())
                 if orig_size is not None:
                     score_img = cv2.resize(score_img, orig_size)

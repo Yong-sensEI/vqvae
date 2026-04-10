@@ -2,7 +2,7 @@
     VQ-VAE's latent prior distribution
 '''
 
-from typing import Union, Type, Dict, Optional, Any, Tuple
+from typing import Union, Type, Dict, Optional, Any, Tuple, Callable
 from abc import abstractmethod
 
 import torch
@@ -151,6 +151,7 @@ class AbstractVQLatentPriorModel(nn.Module):
         logit_threshold : Union[float, Tuple[float, ...]],
         num_reconstructions : int = 1,
         is_thres_quantile : bool = False,
+        image_transform : Optional[Callable] = None,
         **kwargs
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         ''' compute pixel-wise anomaly score'''
@@ -171,7 +172,9 @@ class AbstractVQLatentPriorModel(nn.Module):
         weights = losses / losses.sum()
         recon = (weights.view(weights.size(0), num_reconstructions, -1, 1, 1) * recons
             ).sum(dim = 1)
-        return torch.abs(x_0 - recon), recon
+        score_map = torch.abs(x_0 - recon) if image_transform is None else \
+            torch.abs(image_transform(recon) - image_transform(x_0))
+        return score_map, recon
 
 
 class VQLatentPriorModel(AbstractVQLatentPriorModel):
