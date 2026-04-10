@@ -9,6 +9,7 @@ from threading import Event
 import signal
 import glob
 from typing import Optional
+from PIL import Image
 
 from tqdm import tqdm
 import cv2
@@ -330,8 +331,7 @@ def eval_model(
                     is_thres_quantile = args.rel_thres,
                     **kwargs
                 )
-                score_img = (score_map[0].cpu().numpy() * 255).astype(
-                    np.uint8).transpose(1, 2, 0)
+                score_img = dat_set.image_tensor_to_numpy(score_map[0].cpu())
                 recon_img = dat_set.image_tensor_to_numpy(recon[0].cpu())
                 if orig_size is not None:
                     score_img = cv2.resize(score_img, orig_size)
@@ -353,6 +353,9 @@ def eval_model(
             score_img = ((score_img.astype(float) - i_min) / (i_max - i_min) * 255
                 ).astype(np.uint8)
             if args.colormap is not None:
+                if len(score_img.shape) > 2:
+                    score_img = Image.fromarray(score_img).convert('L')
+                    score_img = np.array(score_img)
                 score_img = cv2.applyColorMap(score_img, args.colormap)
             cv2.imwrite(fn, score_img)
 
